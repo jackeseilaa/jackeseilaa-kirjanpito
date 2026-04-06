@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="J Sailing Kirjanpito">
+<title>J Sailing — Kirjanpito 2026</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --vihrea:#16302a;--vihrea2:#2d5a40;--kulta:#c8a060;--taustaF:#f2ede3;--taustaK:#fff9f0;
+  --teksti:#333;--harmaa:#888;--reunus:#d4c8b0;--font:"Palatino Linotype","Book Antiqua",Palatino,serif;
+  --plus:#1a6030;--minus:#8b2020;
+}
+body{font-family:var(--font);background:var(--taustaF);color:var(--teksti);min-height:100vh}
+
+/* ── HEADER ── */
+.header{background:var(--vihrea);color:#e8dcc0;padding:12px 16px 0;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.header-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.header-nimi{font-size:17px;font-weight:bold}
+.header-sub{font-size:10px;opacity:.6;margin-top:1px}
+.header-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* ── NAV ── */
+.nav{display:flex;gap:1px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav-btn{border:none;padding:8px 12px;cursor:pointer;white-space:nowrap;font-size:11px;font-family:var(--font);border-radius:4px 4px 0 0;transition:all .12s;background:transparent;color:#9abaaa;font-weight:normal}
+.nav-btn.active{background:var(--taustaF);color:var(--vihrea);font-weight:bold}
+
+/* ── MAIN ── */
+.main{max-width:1040px;margin:0 auto;padding:16px 12px}
+
+/* ── TOAST ── */
+.toast{position:fixed;top:12px;right:12px;z-index:9999;background:var(--vihrea);color:#e8dcc0;padding:9px 16px;border-radius:8px;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.35);pointer-events:none;display:none}
+.toast.show{display:block;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── KORTIT ── */
+.card{background:var(--taustaK);border:1px solid var(--reunus);border-radius:8px;overflow:hidden;margin-bottom:11px}
+.card-header{padding:6px 12px;font-size:11px;font-weight:bold;color:#fff}
+.card-body{padding:10px 12px}
+
+/* ── KUUKAUSIPALKKI ── */
+.kk-grid{display:grid;grid-template-columns:180px 1fr;gap:13px;align-items:start}
+.kk-lista{background:var(--taustaK);border:1px solid var(--reunus);border-radius:8px;padding:5px;position:sticky;top:62px}
+.kk-btn{display:block;width:100%;text-align:left;border:none;cursor:pointer;background:transparent;color:var(--teksti);border-radius:4px;padding:5px 8px;margin-bottom:1px;font-family:var(--font);font-size:12px;transition:background .1s}
+.kk-btn.active{background:var(--vihrea);color:#e8dcc0}
+.kk-btn-row{display:flex;justify-content:space-between;align-items:baseline}
+.kk-total{padding:6px 8px 3px;border-top:1px solid var(--reunus);margin-top:4px}
+
+/* ── PIKAINFO ── */
+.pikainfo{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.pika{background:var(--taustaK);border:1px solid var(--reunus);border-radius:5px;padding:5px 9px;min-width:82px}
+.pika-label{font-size:8px;text-transform:uppercase;letter-spacing:.5px;color:var(--harmaa);margin-bottom:1px}
+.pika-arvo{font-size:11px;font-family:monospace;font-weight:normal}
+.pika-arvo.bold{font-weight:bold}
+
+/* ── TAULUKOT ── */
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{border-bottom:1px solid var(--reunus)}
+th{padding:3px 5px;text-align:left;color:#555;font-size:11px;font-weight:600}
+th.r{text-align:right}
+td{padding:2px 4px;vertical-align:middle}
+td.r{text-align:right;font-family:monospace}
+.tr-even{background:#f8fff6}
+.tr-odd{background:#f0faf0}
+.tr-even-g{background:#fffef8}
+.tr-odd-g{background:#f5f0e8}
+
+/* ── LOMAKKEET ── */
+input,select,textarea{font-family:var(--font);font-size:12px;padding:3px 5px;border:1px solid var(--reunus);border-radius:3px;background:#fffef8;color:var(--teksti)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--kulta);outline-offset:1px}
+label.lbl{font-size:10px;color:#666;display:block;margin-bottom:2px;text-transform:uppercase;letter-spacing:.3px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form-col{display:flex;flex-direction:column;gap:7px}
+
+/* ── NAPIT ── */
+.btn{border:none;cursor:pointer;font-family:var(--font);border-radius:4px;transition:opacity .1s}
+.btn:hover{opacity:.85}
+.btn-prim{background:var(--vihrea);color:#e8dcc0;padding:5px 11px;font-size:11px}
+.btn-sec{background:rgba(255,255,255,.15);color:#e8dcc0;padding:5px 10px;font-size:11px}
+.btn-warn{background:rgba(180,60,60,.4);color:#e8dcc0;padding:5px 10px;font-size:11px}
+.btn-green{background:#1a5028;color:#fff;padding:4px 10px;font-size:11px}
+.btn-brown{background:#7a4a10;color:#fff;padding:4px 10px;font-size:11px}
+.btn-blue{background:#3a5a8a;color:#fff;padding:4px 10px;font-size:11px}
+.btn-sm{background:var(--vihrea);color:#e8dcc0;padding:3px 7px;font-size:11px;border-radius:3px}
+.btn-del{background:none;border:none;cursor:pointer;color:#c04040;font-size:14px;padding:0 3px}
+.btn-excel{background:#2d7040;color:#fff;padding:5px 10px;font-size:11px}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--taustaK);border-radius:10px;padding:20px 22px;min-width:320px;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.modal-title{font-size:15px;font-weight:bold;color:var(--vihrea);margin-bottom:14px}
+.modal-btns{display:flex;gap:7px;justify-content:flex-end;margin-top:14px}
+
+/* ── ALV / TILINPÄÄTÖS ── */
+.alv-row{display:flex;justify-content:space-between;padding:2px 0;font-size:12px}
+.alv-row.bold{font-weight:bold}
+.alv-row.korostus span{color:#7a4a10}
+.tp-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dotted #ddd;font-size:12px}
+.tp-row.bold{font-weight:bold}
+.tp-row.sisennys{padding-left:13px}
+.infobanner{background:#e8f0ff;border:1px solid #a0b8e8;border-radius:5px;padding:7px 11px;font-size:11px;color:#2a4a8a;margin-top:9px}
+
+/* ── SYNKRONOITU BADGE ── */
+.sync-badge{font-size:10px;padding:2px 7px;border-radius:10px;background:#dcf0dc;color:#1a6030}
+.sync-badge.syncing{background:#fff3dc;color:#7a5010}
+
+/* ── TUONTI-PALKKI ── */
+.tuonti-bar{background:#fff3dc;border:1px solid #c8a060;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px}
+
+/* ── LOADER ── */
+.loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:14px;color:var(--harmaa)}
+.loader-ring{width:40px;height:40px;border:3px solid #d4c8b0;border-top-color:var(--vihrea);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── PALKIT ── */
+.bar-chart{display:flex;align-items:flex-end;height:72px;gap:2px}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;cursor:pointer}
+.bar{width:100%;border-radius:2px 2px 0 0;min-height:1px}
+.bar-label{font-size:8px;color:var(--harmaa);margin-top:2px}
+
+/* ── RESPONSIVE ── */
+@media(max-width:640px){
+  .kk-grid{grid-template-columns:1fr}
+  .kk-lista{position:static;display:flex;flex-wrap:wrap;gap:3px;padding:6px}
+  .kk-btn{width:auto;padding:4px 8px}
+  .form-grid{grid-template-columns:1fr}
+}
+@media print{
+  .header,.nav,.btn,.modal-overlay{display:none!important}
+  body,div{background:white!important}
+}
+</style>
+</head>
+<body>
+<div id="app"><div class="loader"><div class="loader-ring"></div><div class="loader-text">Ladataan…</div></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import{getFirestore,collection,doc,addDoc,setDoc,deleteDoc,updateDoc,onSnapshot,query,where,orderBy,serverTimestamp,getDocs}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyB7Dp5_5fN0Iko-4Jn1D2Dp6NNNih63UO0",
+  authDomain:"jsailing-f716c.firebaseapp.com",
+  projectId:"jsailing-f716c",
+  storageBucket:"jsailing-f716c.firebasestorage.app",
+  messagingSenderId:"543523103696",
+  appId:"1:543523103696:web:439a312efa6aec398a8fd5"
+};
+const ALLOWED_EMAIL="jacke.seilaa@gmail.com";
+const APP_VERSION="V1.0";
+const VUOSI="2026";
+
+// ── FIREBASE INIT ─────────────────────────────────────────────────────────────
+const app=initializeApp(FIREBASE_CONFIG);
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+// ── VAKIOT ────────────────────────────────────────────────────────────────────
+const KUUKAUDET=["Tammikuu","Helmikuu","Maaliskuu","Huhtikuu","Toukokuu","Kesäkuu","Heinäkuu","Elokuu","Syyskuu","Lokakuu","Marraskuu","Joulukuu"];
+const KK3=["Tam","Hel","Maa","Huh","Tou","Kes","Hei","Elo","Syy","Lok","Mar","Jou"];
+const ALV_KANNAT=[
+  {label:"25,5 % — yleinen (kurssit, tavarat)",value:0.255},
+  {label:"13,5 % — elintarvikkeet, ravintolat",value:0.135},
+  {label:"10 % — charter, henkilökuljetus",value:0.10},
+  {label:"0 % — viranomaistutkinnot",value:0},
+];
+const MENO_KAT=[
+  {id:"aineet",label:"Aineet ja tarvikkeet"},
+  {id:"palkat",label:"Palkat"},
+  {id:"sivukulut",label:"Henkilösivukulut"},
+  {id:"vuokrat",label:"Vuokrat"},
+  {id:"matkat",label:"Matkakulut"},
+  {id:"markkinointi",label:"Markkinointi"},
+  {id:"toimisto",label:"Toimistokulut"},
+  {id:"vakuutukset",label:"Vakuutukset"},
+  {id:"yel",label:"YEL-maksut"},
+  {id:"poistot",label:"Poistot"},
+  {id:"muut",label:"Muut kulut"},
+];
+
+// ── TILA ──────────────────────────────────────────────────────────────────────
+let state={
+  user:null, tab:"kuukaudet", valittuKk:new Date().getMonth(),
+  // Kirjanpitodata (Firestoressa per vuosi/kuukausi)
+  kkData:{}, // {0:{myyntiRivit:[],ostoRivit:[],menot:{},muutTulot:"",muistiinpanot:""},…}
+  // Tilaukset-sovelluksesta tuodut
+  sailings:[], tutkinnot_tilaukset:[], invoices:[],
+  // Omat laskut
+  laskut:[], tositteet:[], asiakkaat:[],
+  // UI
+  modal:null, syncing:false, syncMsg:"",
+  yritys:{nimi:"J Sailing / Jarmo",ytunnus:"1728993-9",iban:"FI62 1132 3000 4277 43",email:"jacke.seilaa@gmail.com",kotipaikka:"Loviisa"},
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const fmt=(n,d=2)=>Number(n||0).toLocaleString("fi-FI",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtD=iso=>{if(!iso)return"";const d=new Date(iso);return`${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()}`};
+const tv=t=>t>=0?"var(--plus)":"var(--minus)";
+const laskeMA=r=>r.reduce((s,x)=>s+(Number(x.veroton)||0)*x.alvKanta,0);
+const laskeMV=r=>r.reduce((s,x)=>s+(Number(x.veroton)||0),0);
+const laskeOA=r=>r.reduce((s,x)=>s+(Number(x.veroton)||0)*x.alvKanta,0);
+const laskeMe=m=>MENO_KAT.reduce((s,k)=>s+Number(m[k.id]||0),0);
+const laskeVero=t=>t<=0?0:t<20000?t*.08:t<40000?t*.22:t<60000?t*.30:t*.37;
+
+function tyhjäKk(){
+  return{
+    myyntiRivit:[{id:Date.now(),kuvaus:"",alvKanta:0.255,veroton:""}],
+    ostoRivit:[{id:Date.now()+1,kuvaus:"",alvKanta:0.255,veroton:""}],
+    menot:Object.fromEntries(MENO_KAT.map(k=>[k.id,""])),
+    muutTulot:"",muistiinpanot:""
+  };
+}
+
+function kkSumma(i){
+  const d=state.kkData[i]||tyhjäKk();
+  const mv=laskeMV(d.myyntiRivit),ma=laskeMA(d.myyntiRivit);
+  const oa=laskeOA(d.ostoRivit),me=laskeMe(d.menot);
+  const mt=Number(d.muutTulot||0);
+  return{myyntiVeroton:mv,myyntiAlv:ma,ostoAlv:oa,menot:me,muutTulot:mt,tulos:mv+mt-me,alvMaksettava:ma-oa};
+}
+
+function vuosiSummat(){
+  const ss=Array.from({length:12},(_,i)=>kkSumma(i));
+  return{
+    myyntiVeroton:ss.reduce((s,k)=>s+k.myyntiVeroton,0),
+    muutTulot:ss.reduce((s,k)=>s+k.muutTulot,0),
+    menot:ss.reduce((s,k)=>s+k.menot,0),
+    tulos:ss.reduce((s,k)=>s+k.tulos,0),
+    menotPer:Object.fromEntries(MENO_KAT.map(k=>[k.id,
+      Array.from({length:12},(_,i)=>Number((state.kkData[i]||tyhjäKk()).menot[k.id]||0)).reduce((a,b)=>a+b,0)
+    ])),
+    ss,
+  };
+}
+
+function kvartaalit(){
+  return[0,1,2,3].map(q=>{
+    const kks=[q*3,q*3+1,q*3+2];
+    const ss=kks.map(i=>kkSumma(i));
+    return{
+      myyntiAlv:ss.reduce((s,k)=>s+k.myyntiAlv,0),
+      ostoAlv:ss.reduce((s,k)=>s+k.ostoAlv,0),
+      myyntiVeroton:ss.reduce((s,k)=>s+k.myyntiVeroton,0),
+      maksettava:ss.reduce((s,k)=>s+k.alvMaksettava,0),
+    };
+  });
+}
+
+function showToast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),3000);
+}
+
+// ── FIRESTORE TALLENNNUS ──────────────────────────────────────────────────────
+let saveTimer={};
+async function tallenna(kk){
+  clearTimeout(saveTimer[kk]);
+  saveTimer[kk]=setTimeout(async()=>{
+    if(!state.user)return;
+    try{
+      const ref=doc(db,`kirjanpito/${VUOSI}/kuukaudet/${kk}`);
+      await setDoc(ref,{...state.kkData[kk],paivitetty:serverTimestamp()});
+    }catch(e){console.error("Tallennus epäonnistui",e);}
+  },900);
+}
+
+async function tallennaMeta(kenttä,arvo){
+  if(!state.user)return;
+  const ref=doc(db,`kirjanpito/${VUOSI}/meta/yritys`);
+  await setDoc(ref,{[kenttä]:arvo},{merge:true});
+}
+
+// ── FIRESTORE KUUNTELU ────────────────────────────────────────────────────────
+let unsubs=[];
+function aloitaKuuntelu(){
+  unsubs.forEach(u=>u());unsubs=[];
+
+  // Kuukausidata
+  for(let i=0;i<12;i++){
+    const kk=i;
+    const u=onSnapshot(doc(db,`kirjanpito/${VUOSI}/kuukaudet/${kk}`),snap=>{
+      if(snap.exists()){
+        const d=snap.data();
+        state.kkData[kk]={
+          myyntiRivit:d.myyntiRivit||[{id:Date.now(),kuvaus:"",alvKanta:0.255,veroton:""}],
+          ostoRivit:d.ostoRivit||[{id:Date.now()+1,kuvaus:"",alvKanta:0.255,veroton:""}],
+          menot:d.menot||Object.fromEntries(MENO_KAT.map(k=>[k.id,""])),
+          muutTulot:d.muutTulot||"",
+          muistiinpanot:d.muistiinpanot||"",
+        };
+      } else {
+        if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+      }
+      if(state.tab==="kuukaudet"||state.tab==="yhteenveto"||state.tab==="alv")render();
+    });
+    unsubs.push(u);
+  }
+
+  // Tilaukset-sovelluksesta — purjehdukset (sailings)
+  const uSailings=onSnapshot(collection(db,"sailings"),snap=>{
+    state.sailings=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(state.tab==="tuonti")render();
+  });
+  unsubs.push(uSailings);
+
+  // Tilaukset-sovelluksesta — tutkinnot
+  const uTutkinnot=onSnapshot(collection(db,"tutkinnot"),snap=>{
+    state.tutkinnot_tilaukset=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(state.tab==="tuonti")render();
+  });
+  unsubs.push(uTutkinnot);
+
+  // Tilaukset-sovelluksesta — laskut
+  const uInvoices=onSnapshot(collection(db,"invoices"),snap=>{
+    state.invoices=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(state.tab==="tuonti")render();
+  });
+  unsubs.push(uInvoices);
+
+  // Kirjanpidon omat laskut
+  const uLaskut=onSnapshot(collection(db,`kirjanpito/${VUOSI}/laskut`),snap=>{
+    state.laskut=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(state.tab==="laskutus")render();
+  });
+  unsubs.push(uLaskut);
+
+  // Tositteet
+  const uTositteet=onSnapshot(collection(db,`kirjanpito/${VUOSI}/tositteet`),snap=>{
+    state.tositteet=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(state.tab==="tositeet")render();
+  });
+  unsubs.push(uTositteet);
+
+  // Asiakkaat (jaettu tilaukset-sovelluksen kanssa)
+  const uAsiakkaat=onSnapshot(collection(db,"customers"),snap=>{
+    state.asiakkaat=snap.docs.map(d=>({id:d.id,...d.data()}));
+  });
+  unsubs.push(uAsiakkaat);
+
+  // Yritystiedot
+  const uYritys=onSnapshot(doc(db,`kirjanpito/${VUOSI}/meta/yritys`),snap=>{
+    if(snap.exists()) state.yritys={...state.yritys,...snap.data()};
+  });
+  unsubs.push(uYritys);
+}
+
+// ── TUONTI TILAUKSET → KIRJANPITO ─────────────────────────────────────────────
+async function tuoSailing(sailing){
+  const kk=new Date(sailing.date||sailing.startDate||sailing.pvm||Date.now()).getMonth();
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  const alvKanta=sailing.type==="Charter"?0.10:0.255;
+  const veroton=Number(sailing.totalPrice||sailing.hinta||sailing.price||0);
+  const uusiRivi={id:Date.now(),kuvaus:`${sailing.type||"Purjehdus"} — ${sailing.customer||sailing.asiakasNimi||""}`,alvKanta,veroton:veroton.toFixed(2)};
+  state.kkData[kk].myyntiRivit.push(uusiRivi);
+  await tallenna(kk);
+  showToast(`⛵ ${sailing.type||"Purjehdus"} tuotu ${KUUKAUDET[kk]}lle`);
+  render();
+}
+
+async function tuoTutkinto(t){
+  const kk=new Date(t.date||t.pvm||Date.now()).getMonth();
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  const veroton=Number(t.hinta||t.price||t.amount||0);
+  const uusiRivi={id:Date.now(),kuvaus:`Tutkinto: ${t.type||t.tyyppi||"Tutkinto"} — ${t.participant||t.osallistuja||""}`,alvKanta:0,veroton:veroton.toFixed(2)};
+  state.kkData[kk].myyntiRivit.push(uusiRivi);
+  await tallenna(kk);
+  showToast(`⚓ Tutkinto tuotu ${KUUKAUDET[kk]}lle`);
+  render();
+}
+
+async function tuoLasku(inv){
+  const kk=new Date(inv.invoiceDate||inv.date||Date.now()).getMonth();
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  const veroton=Number(inv.totalExVat||inv.amount||inv.summa||0);
+  const alvKanta=Number(inv.vatRate||inv.alv||0.255);
+  const uusiRivi={id:Date.now(),kuvaus:`Lasku ${inv.invoiceNumber||inv.nro||""} — ${inv.customerName||inv.asiakas||""}`,alvKanta,veroton:veroton.toFixed(2)};
+  state.kkData[kk].myyntiRivit.push(uusiRivi);
+  await tallenna(kk);
+  showToast(`🧾 Lasku tuotu ${KUUKAUDET[kk]}lle`);
+  render();
+}
+
+async function tuoKaikki(){
+  // Maksetut purjehdukset joita ei ole vielä tuotu
+  const tuodut=new Set(Object.values(state.kkData).flatMap(d=>d.myyntiRivit.map(r=>r.sailingId)).filter(Boolean));
+  let lkm=0;
+  for(const s of state.sailings){
+    if(!tuodut.has(s.id)&&(s.status==="paid"||s.tila==="maksettu"||s.paymentStatus==="paid")){
+      await tuoSailing(s); lkm++;
+    }
+  }
+  // Maksetut laskut
+  for(const inv of state.invoices){
+    if(!tuodut.has(inv.id)&&(inv.status==="paid"||inv.tila==="maksettu")){
+      await tuoLasku(inv); lkm++;
+    }
+  }
+  showToast(`✅ Tuotiin ${lkm} merkintää kirjanpitoon`);
+  render();
+}
+
+// ── EXCEL VIENTI ──────────────────────────────────────────────────────────────
+function vieCSV(){
+  const vs=vuosiSummat();
+  const rows=[
+    ["Kuukausi","Myynti (veroton)","Muut tulot","Kulut","Tulos","ALV suoritettava","ALV vähennettävä","ALV maksettava"],
+    ...Array.from({length:12},(_,i)=>{const s=vs.ss[i];return[KUUKAUDET[i],s.myyntiVeroton,s.muutTulot,s.menot,s.tulos,s.myyntiAlv,s.ostoAlv,s.alvMaksettava];}),
+    [],
+    ["YHTEENSÄ",vs.myyntiVeroton,vs.muutTulot,vs.menot,vs.tulos,
+      kvartaalit().reduce((s,q)=>s+q.myyntiAlv,0),
+      kvartaalit().reduce((s,q)=>s+q.ostoAlv,0),
+      kvartaalit().reduce((s,q)=>s+q.maksettava,0)],
+  ];
+  const csv=rows.map(r=>r.map(v=>typeof v==="number"?v.toFixed(2):String(v||"")).join(";")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`kirjanpito_${VUOSI}.csv`;a.click();
+  showToast("📊 CSV ladattu (avaa Excelissä)");
+}
+
+// ── RENDER HELPERS ────────────────────────────────────────────────────────────
+function alvSelect(val,onChange){
+  return`<select onchange="${onChange}" style="padding:3px;border:1px solid var(--reunus);border-radius:3px;font-size:12px;background:#fffef8;">
+    ${ALV_KANNAT.map(k=>`<option value="${k.value}"${Number(val)===k.value?" selected":""}>${k.label}</option>`).join("")}
+  </select>`;
+}
+
+function menoKatSelect(val,onChange){
+  return`<select onchange="${onChange}" style="padding:3px;border:1px solid var(--reunus);border-radius:3px;font-size:12px;background:#fffef8;width:100%;">
+    ${MENO_KAT.map(k=>`<option value="${k.id}"${val===k.id?" selected":""}>${k.label}</option>`).join("")}
+  </select>`;
+}
+
+// ── RENDER NÄKYMÄT ────────────────────────────────────────────────────────────
+function renderKuukaudet(){
+  const kk=state.valittuKk;
+  const d=state.kkData[kk]||tyhjäKk();
+  const s=kkSumma(kk);
+  const vs=vuosiSummat();
+
+  const kkLista=KUUKAUDET.map((n,i)=>{
+    const si=kkSumma(i);
+    const has=si.myyntiVeroton>0||si.menot>0;
+    return`<button class="kk-btn${i===kk?" active":""}" onclick="setKk(${i})">
+      <div class="kk-btn-row">
+        <span style="font-size:12px">${has?`<span style="color:${i===kk?(si.tulos>=0?"#8fbc8f":"#e08080"):tv(si.tulos)};font-size:8px;margin-right:3px">●</span>`:""}${n.slice(0,3)}</span>
+        <span style="font-size:10px;font-family:monospace;color:${i===kk?(si.tulos>=0?"#8fbc8f":"#e08080"):tv(si.tulos)}">${si.tulos!==0?fmt(si.tulos,0):"–"}</span>
+      </div>
+    </button>`;
+  }).join("");
+
+  const myyntiRivit=d.myyntiRivit.map((r,i)=>`
+    <tr class="${i%2===0?"tr-even":"tr-odd"}">
+      <td><input value="${r.kuvaus||""}" oninput="updRivi('myynti',${i},'kuvaus',this.value)" style="width:148px" placeholder="Kuvaus/asiakas…"/></td>
+      <td>${alvSelect(r.alvKanta,`updRivi('myynti',${i},'alvKanta',Number(this.value))`)}</td>
+      <td><input type="number" value="${r.veroton||""}" oninput="updRivi('myynti',${i},'veroton',this.value)" style="width:78px;text-align:right" placeholder="0.00"/></td>
+      <td class="r" style="color:var(--plus)">${fmt((Number(r.veroton)||0)*r.alvKanta)}</td>
+      <td class="r">${fmt((Number(r.veroton)||0)*(1+r.alvKanta))}</td>
+      <td><button class="btn-del" onclick="poistaRivi('myynti',${i})">×</button></td>
+    </tr>`).join("");
+
+  const ostoRivit=d.ostoRivit.map((r,i)=>`
+    <tr class="${i%2===0?"tr-even-g":"tr-odd-g"}">
+      <td><input value="${r.kuvaus||""}" oninput="updRivi('osto',${i},'kuvaus',this.value)" style="width:163px" placeholder="Ostos/toimittaja…"/></td>
+      <td>${alvSelect(r.alvKanta,`updRivi('osto',${i},'alvKanta',Number(this.value))`)}</td>
+      <td><input type="number" value="${r.veroton||""}" oninput="updRivi('osto',${i},'veroton',this.value)" style="width:78px;text-align:right" placeholder="0.00"/></td>
+      <td class="r" style="color:#7a5010">${fmt((Number(r.veroton)||0)*r.alvKanta)}</td>
+      <td><button class="btn-del" onclick="poistaRivi('osto',${i})">×</button></td>
+    </tr>`).join("");
+
+  const menoInputit=MENO_KAT.map(k=>`
+    <div style="display:flex;align-items:center;gap:5px">
+      <label style="flex:1;font-size:11px;color:#444">${k.label}</label>
+      <div style="position:relative">
+        <input type="number" value="${d.menot[k.id]||""}" oninput="updMeno('${k.id}',this.value)" style="width:82px;text-align:right;padding-right:18px" placeholder="0,00"/>
+        <span style="position:absolute;right:4px;top:4px;font-size:9px;color:#bbb">€</span>
+      </div>
+    </div>`).join("");
+
+  return`
+  <div class="kk-grid">
+    <div class="kk-lista">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--harmaa);padding:4px 7px 4px">Kuukausi</div>
+      ${kkLista}
+      <div class="kk-total">
+        <div style="font-size:9px;color:var(--harmaa);text-transform:uppercase;letter-spacing:.4px">${VUOSI}</div>
+        <div style="font-size:14px;font-weight:bold;font-family:monospace;color:${tv(vs.tulos)}">${fmt(vs.tulos,0)} €</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;flex-wrap:wrap;gap:6px">
+        <h2 style="color:var(--vihrea);font-size:17px;margin:0">${KUUKAUDET[kk]} ${VUOSI}</h2>
+        <div style="display:flex;gap:5px">
+          ${kk>0?`<button class="btn btn-sm" style="background:#7a5020" onclick="kopioi()">📋 Kopioi kulut edelt. kk</button>`:""}
+          <button class="btn btn-sm" onclick="setModal('tosite')">📎 + Tosite</button>
+        </div>
+      </div>
+
+      <div class="pikainfo">
+        <div class="pika"><div class="pika-label">Myynti (veroton)</div><div class="pika-arvo" style="color:var(--plus)">${fmt(s.myyntiVeroton)} €</div></div>
+        <div class="pika"><div class="pika-label">Kulut</div><div class="pika-arvo" style="color:var(--minus)">${fmt(s.menot)} €</div></div>
+        <div class="pika"><div class="pika-label">Tulos</div><div class="pika-arvo bold" style="color:${tv(s.tulos)}">${fmt(s.tulos)} €</div></div>
+        <div class="pika"><div class="pika-label">ALV maksettava</div><div class="pika-arvo" style="color:#7a5010">${fmt(s.alvMaksettava)} €</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="background:#1a5028">💰 Myynnit</div>
+        <div class="card-body">
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th>Kuvaus</th><th>ALV-%</th><th class="r">Veroton €</th><th class="r">ALV €</th><th class="r">Verollinen €</th><th></th>
+              </tr></thead>
+              <tbody>${myyntiRivit}</tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">
+            <button class="btn btn-green" onclick="lisääRivi('myynti')">+ Rivi</button>
+            <span style="font-size:11px;font-family:monospace;color:var(--plus);font-weight:bold">Veroton: ${fmt(s.myyntiVeroton)} € | ALV: ${fmt(s.myyntiAlv)} € | Yht: ${fmt(s.myyntiVeroton+s.myyntiAlv)} €</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="background:#7a4a10">🛒 Ostot — ALV-vähennysoikeus</div>
+        <div class="card-body">
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Kuvaus</th><th>ALV-%</th><th class="r">Veroton €</th><th class="r">Väh. ALV €</th><th></th></tr></thead>
+              <tbody>${ostoRivit}</tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">
+            <button class="btn btn-brown" onclick="lisääRivi('osto')">+ Rivi</button>
+            <span style="font-size:11px;font-family:monospace;color:#7a4a10;font-weight:bold">Vähennettävä ALV: ${fmt(s.ostoAlv)} €</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="background:#3a5a8a">➕ Muut tulot (ALV 0 %)</div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="flex:1;font-size:12px;color:#444">Muut tulot (avustukset, korot, palautukset)</label>
+            <div style="position:relative">
+              <input type="number" value="${d.muutTulot||""}" oninput="updKk('muutTulot',this.value)" style="width:100px;text-align:right;padding-right:20px" placeholder="0,00"/>
+              <span style="position:absolute;right:5px;top:4px;font-size:9px;color:#aaa">€</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="background:#8b3a3a">📤 Liiketoiminnan kulut</div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">${menoInputit}</div>
+          <div style="text-align:right;margin-top:6px;font-family:monospace;font-size:12px;font-weight:bold;color:var(--minus)">Kulut yhteensä: ${fmt(s.menot)} €</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="background:#555">📝 Muistiinpanot</div>
+        <div class="card-body">
+          <textarea oninput="updKk('muistiinpanot',this.value)" placeholder="${KUUKAUDET[kk]} muistio…" style="width:100%;min-height:52px;resize:vertical;padding:5px 7px;font-size:11px;border:1px solid var(--reunus);border-radius:4px;background:#fffef8;box-sizing:border-box">${d.muistiinpanot||""}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTuonti(){
+  const maksetutSailings=state.sailings.filter(s=>s.status==="paid"||s.tila==="maksettu"||s.paymentStatus==="paid");
+  const maksetutInvoices=state.invoices.filter(i=>i.status==="paid"||i.tila==="maksettu");
+  const tutkinnot=state.tutkinnot_tilaukset;
+
+  return`
+  <h2 style="color:var(--vihrea);margin:0 0 4px">Tuonti tilaukset-sovelluksesta</h2>
+  <p style="font-size:11px;color:var(--harmaa);margin:0 0 14px">Tuo maksetut purjehdukset, tutkinnot ja laskut suoraan kirjanpitoon</p>
+
+  <div class="tuonti-bar">
+    <strong>⚡ Tuo kaikki kerralla</strong> — hakee kaikki maksetut tapahtumat jotka eivät ole vielä kirjanpidossa
+    <br><button class="btn btn-prim" style="margin-top:7px" onclick="tuoKaikki()">🔄 Tuo kaikki maksetut (${maksetutSailings.length+maksetutInvoices.length} kpl)</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+    <div class="pika" style="min-width:auto">
+      <div class="pika-label">Purjehduksia Firestoressa</div>
+      <div class="pika-arvo bold" style="color:var(--plus);font-size:14px">${state.sailings.length} kpl</div>
+      <div style="font-size:10px;color:var(--harmaa);margin-top:2px">joista maksettu: ${maksetutSailings.length}</div>
+    </div>
+    <div class="pika" style="min-width:auto">
+      <div class="pika-label">Tutkintoja</div>
+      <div class="pika-arvo bold" style="color:var(--plus);font-size:14px">${tutkinnot.length} kpl</div>
+    </div>
+    <div class="pika" style="min-width:auto">
+      <div class="pika-label">Laskuja</div>
+      <div class="pika-arvo bold" style="color:var(--plus);font-size:14px">${state.invoices.length} kpl</div>
+      <div style="font-size:10px;color:var(--harmaa);margin-top:2px">joista maksettu: ${maksetutInvoices.length}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="background:#1a5028">⛵ Maksetut purjehdukset</div>
+    <div class="card-body">
+      ${maksetutSailings.length===0?`<div style="color:var(--harmaa);font-size:13px;padding:10px 0">Ei maksettu purjehduksia löydetty</div>`:`
+      <table>
+        <thead><tr><th>Pvm</th><th>Tyyppi</th><th>Asiakas</th><th class="r">Summa</th><th></th></tr></thead>
+        <tbody>
+          ${maksetutSailings.map((s,i)=>`
+            <tr class="${i%2===0?"tr-even":"tr-odd"}">
+              <td>${fmtD(s.date||s.startDate||s.pvm)}</td>
+              <td>${s.type||s.tyyppi||"—"}</td>
+              <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${s.customer||s.asiakasNimi||"—"}</td>
+              <td class="r">${fmt(Number(s.totalPrice||s.hinta||s.price||0))} €</td>
+              <td><button class="btn btn-sm" onclick="tuoSailingById('${s.id}')">+ Kirjaa</button></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="background:#16302a">⚓ Tutkinnot</div>
+    <div class="card-body">
+      ${tutkinnot.length===0?`<div style="color:var(--harmaa);font-size:13px;padding:10px 0">Ei tutkintoja löydetty</div>`:`
+      <table>
+        <thead><tr><th>Pvm</th><th>Tyyppi</th><th>Osallistuja</th><th class="r">Summa</th><th></th></tr></thead>
+        <tbody>
+          ${tutkinnot.map((t,i)=>`
+            <tr class="${i%2===0?"tr-even-g":"tr-odd-g"}">
+              <td>${fmtD(t.date||t.pvm)}</td>
+              <td>${t.type||t.tyyppi||"—"}</td>
+              <td>${t.participant||t.osallistuja||t.name||"—"}</td>
+              <td class="r">${fmt(Number(t.hinta||t.price||t.amount||0))} €</td>
+              <td><button class="btn btn-sm" onclick="tuoTutkintoById('${t.id}')">+ Kirjaa</button></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="background:#3a5a8a">🧾 Maksetut laskut</div>
+    <div class="card-body">
+      ${maksetutInvoices.length===0?`<div style="color:var(--harmaa);font-size:13px;padding:10px 0">Ei maksettuja laskuja löydetty</div>`:`
+      <table>
+        <thead><tr><th>Nro</th><th>Asiakas</th><th>Pvm</th><th class="r">Summa</th><th></th></tr></thead>
+        <tbody>
+          ${maksetutInvoices.map((inv,i)=>`
+            <tr class="${i%2===0?"tr-even":"tr-odd"}">
+              <td style="font-family:monospace;color:var(--plus)">${inv.invoiceNumber||inv.nro||"—"}</td>
+              <td>${inv.customerName||inv.asiakas||"—"}</td>
+              <td>${fmtD(inv.invoiceDate||inv.date)}</td>
+              <td class="r">${fmt(Number(inv.totalExVat||inv.amount||inv.summa||0))} €</td>
+              <td><button class="btn btn-sm" onclick="tuoLaskuById('${inv.id}')">+ Kirjaa</button></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`}
+    </div>
+  </div>`;
+}
+
+function renderAlv(){
+  const kv=kvartaalit();
+  const kvHtml=kv.map((q,i)=>{
+    const kks=[i*3,i*3+1,i*3+2];
+    const eräpäivä=["12.4.","12.7.","12.10.","12.1."][i]+(i===3?Number(VUOSI)+1:VUOSI);
+    return`<div class="card" style="border:2px solid ${q.maksettava>0?"#c8a060":"#60a860"}">
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <strong style="color:var(--vihrea)">Q${i+1} / ${VUOSI}</strong>
+          <span style="font-size:10px;background:#e8dcc0;padding:2px 7px;border-radius:10px;color:#7a5010">Eräpäivä ${eräpäivä}</span>
+        </div>
+        ${kks.map(j=>`<div class="alv-row" style="font-size:10px;border-bottom:1px dotted #e0d0b0;color:#777"><span>${KUUKAUDET[j]}</span><span style="font-family:monospace">${fmt(kkSumma(j).myyntiVeroton)} € | ALV ${fmt(kkSumma(j).myyntiAlv)} €</span></div>`).join("")}
+        <div style="border-top:1px solid #c8b090;margin-top:6px;padding-top:6px">
+          <div class="alv-row"><span>Veroton myynti</span><span style="font-family:monospace">${fmt(q.myyntiVeroton)} €</span></div>
+          <div class="alv-row"><span>Suoritettava ALV</span><span style="font-family:monospace">${fmt(q.myyntiAlv)} €</span></div>
+          <div class="alv-row"><span>Vähennettävä ALV</span><span style="font-family:monospace">${fmt(q.ostoAlv)} €</span></div>
+          <div style="border-top:2px solid ${q.maksettava>=0?"#c8a060":"#60a860"};margin-top:4px;padding-top:4px">
+            <div class="alv-row bold korostus"><span>${q.maksettava>=0?"💸 Maksettava":"💰 Palautettava"}</span><span style="font-family:monospace">${fmt(Math.abs(q.maksettava))} €</span></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  return`
+  <h2 style="color:var(--vihrea);margin:0 0 2px">ALV-ilmoitukset ${VUOSI}</h2>
+  <p style="font-size:11px;color:var(--harmaa);margin:0 0 14px">Neljännesvuosittainen OmaVero-ilmoitus · vero.fi/omavero</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">${kvHtml}</div>
+  <div style="margin-top:12px;background:#f0f8f0;border:2px solid #2d7040;border-radius:8px;padding:12px 16px">
+    <h3 style="margin:0 0 8px;color:var(--vihrea);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Vuosi ${VUOSI} — yhteenveto</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      ${[["Veroton myynti",kv.reduce((s,q)=>s+q.myyntiVeroton,0)],["Suoritettava",kv.reduce((s,q)=>s+q.myyntiAlv,0)],["Vähennettävä",kv.reduce((s,q)=>s+q.ostoAlv,0)],["Netto",kv.reduce((s,q)=>s+q.maksettava,0)]].map(([l,v])=>`<div><div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">${l}</div><div style="font-size:14px;font-family:monospace;font-weight:bold;color:var(--plus)">${fmt(v)} €</div></div>`).join("")}
+    </div>
+  </div>`;
+}
+
+function renderYhteenveto(){
+  const vs=vuosiSummat();
+  const maxAbs=Math.max(...vs.ss.map(s=>Math.abs(s.tulos)),1);
+  const palkit=vs.ss.map((s,i)=>{
+    const h=Math.max(Math.abs(s.tulos)/maxAbs*64,s.tulos!==0?2:0);
+    return`<div class="bar-wrap" onclick="setKk(${i});setTab('kuukaudet')">
+      <div class="bar" style="height:${h}px;background:${s.tulos>=0?"#2d7040":"#8b3a3a"}"></div>
+      <div class="bar-label">${KK3[i]}</div>
+    </div>`;
+  }).join("");
+
+  const rivit=vs.ss.map((s,i)=>`
+    <tr class="${i%2===0?"tr-even-g":"tr-odd-g"}" style="cursor:pointer" onclick="setKk(${i});setTab('kuukaudet')">
+      <td><span style="margin-right:4px;font-size:8px;color:${s.tulos>0?"#2d7040":s.tulos<0?"#8b3a3a":"#ccc"}">●</span>${KUUKAUDET[i]}</td>
+      <td class="r">${fmt(s.myyntiVeroton)}</td>
+      <td class="r" style="color:var(--harmaa)">${fmt(s.muutTulot)}</td>
+      <td class="r" style="color:var(--minus)">${fmt(s.menot)}</td>
+      <td class="r" style="color:#7a5010">${fmt(s.alvMaksettava)}</td>
+      <td class="r" style="font-weight:bold;color:${tv(s.tulos)}">${fmt(s.tulos)}</td>
+    </tr>`).join("");
+
+  const menoRivit=MENO_KAT.map(k=>`
+    <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px dotted #ddd">
+      <span style="color:#555">${k.label}</span><span style="font-family:monospace">${fmt(vs.menotPer[k.id])} €</span>
+    </div>`).join("");
+
+  return`
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;flex-wrap:wrap;gap:7px">
+    <h2 style="color:var(--vihrea);margin:0">Vuosikoonti ${VUOSI}</h2>
+    <button class="btn btn-excel" onclick="vieCSV()">📊 Vie CSV (Excel)</button>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-body">
+      <div style="font-size:9px;color:var(--harmaa);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Kuukausittainen tulos</div>
+      <div class="bar-chart">${palkit}</div>
+    </div>
+  </div>
+  <div class="card" style="overflow:hidden;margin-bottom:12px">
+    <table>
+      <thead><tr style="background:var(--vihrea);color:#e8dcc0">
+        ${["Kuukausi","Myynti","Muut","Kulut","ALV","Tulos"].map(h=>`<th class="${h!=="Kuukausi"?"r":""}" style="padding:6px 10px;font-weight:normal;font-size:11px">${h}</th>`).join("")}
+      </tr></thead>
+      <tbody>${rivit}</tbody>
+      <tfoot><tr style="background:#e8f0e8;font-weight:bold;border-top:2px solid #2d7040">
+        <td style="padding:6px 10px;font-size:12px">YHTEENSÄ</td>
+        <td class="r" style="padding:6px 10px;font-family:monospace">${fmt(vs.myyntiVeroton)}</td>
+        <td class="r" style="padding:6px 10px;font-family:monospace">${fmt(vs.muutTulot)}</td>
+        <td class="r" style="padding:6px 10px;font-family:monospace">${fmt(vs.menot)}</td>
+        <td class="r" style="padding:6px 10px;font-family:monospace">${fmt(kvartaalit().reduce((s,q)=>s+q.maksettava,0))}</td>
+        <td class="r" style="padding:6px 10px;font-family:monospace;color:${tv(vs.tulos)}">${fmt(vs.tulos)}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-header" style="background:#8b3a3a">📤 Menoerittely koko vuosi</div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">${menoRivit}</div>
+      <div style="text-align:right;margin-top:6px;font-family:monospace;font-weight:bold;color:var(--minus)">Kulut yhteensä: ${fmt(vs.menot)} €</div>
+    </div>
+  </div>`;
+}
+
+function renderTilinpäätös(){
+  const vs=vuosiSummat();
+  const vero=laskeVero(vs.tulos);
+  const kv=kvartaalit();
+
+  const kulutRivit=MENO_KAT.filter(k=>vs.menotPer[k.id]>0).map(k=>`
+    <div class="tp-row sisennys"><span>${k.label}</span><span style="font-family:monospace">(${fmt(vs.menotPer[k.id])} €)</span></div>`).join("");
+
+  const kkErittely=Array.from({length:12},(_,i)=>{const s=kkSumma(i);return`
+    <tr class="${i%2===0?"tr-even-g":"tr-odd-g"}" style="border-bottom:1px solid #e8e0d0">
+      <td style="padding:3px 8px">${KK3[i]}</td>
+      <td class="r" style="padding:3px 8px;font-family:monospace">${fmt(s.myyntiVeroton)}</td>
+      <td class="r" style="padding:3px 8px;font-family:monospace;color:var(--harmaa)">${fmt(s.muutTulot)}</td>
+      <td class="r" style="padding:3px 8px;font-family:monospace;color:var(--minus)">${fmt(s.menot)}</td>
+      <td class="r" style="padding:3px 8px;font-family:monospace;font-weight:bold;color:${tv(s.tulos)}">${fmt(s.tulos)}</td>
+      <td class="r" style="padding:3px 8px;font-family:monospace;color:#7a5010">${fmt(s.alvMaksettava)}</td>
+    </tr>`;}).join("");
+
+  return`
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;flex-wrap:wrap;gap:7px">
+    <h2 style="color:var(--vihrea);margin:0">Tilinpäätös ${VUOSI}</h2>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-excel" onclick="vieCSV()">📊 CSV</button>
+      <button class="btn btn-prim" onclick="window.print()">🖨️ Tulosta</button>
+    </div>
+  </div>
+  <p style="font-size:11px;color:var(--harmaa);margin:0 0 12px">${state.yritys.nimi} · Y-tunnus ${state.yritys.ytunnus} · 1.1.–31.12.${VUOSI}</p>
+  <div class="infobanner">ℹ️ Toiminimi (pienyritys, lv &lt;200 000 €) ei ole velvollinen julkistamaan tilinpäätöstä. Toimita OmaVerossa huhtikuussa.</div>
+
+  <div class="card" style="margin-top:12px;overflow:hidden">
+    <div class="card-header" style="background:var(--vihrea);font-size:11px;letter-spacing:1px;text-transform:uppercase">Tuloslaskelma — ${state.yritys.nimi} — ${VUOSI}</div>
+    <div class="card-body">
+      <div class="tp-row bold"><span>LIIKEVAIHTO</span><span style="font-family:monospace">${fmt(vs.myyntiVeroton)} €</span></div>
+      <div class="tp-row"><span>Liiketoiminnan muut tuotot</span><span style="font-family:monospace">${fmt(vs.muutTulot)} €</span></div>
+      <div style="height:3px"></div>
+      ${kulutRivit}
+      <div style="border-top:2px solid var(--vihrea);margin:5px 0 3px"></div>
+      <div class="tp-row bold"><span>LIIKEVOITTO / -TAPPIO</span><span style="font-family:monospace">${fmt(vs.tulos)} €</span></div>
+      <div class="tp-row"><span>Rahoitustuotot ja -kulut</span><span style="font-family:monospace">0,00 €</span></div>
+      <div class="tp-row bold"><span>VOITTO (TAPPIO) ENNEN VEROJA</span><span style="font-family:monospace">${fmt(vs.tulos)} €</span></div>
+    </div>
+  </div>
+
+  <div style="margin-top:10px;background:#f0f8f0;border:2px solid #2d7040;border-radius:8px;padding:12px 16px">
+    <h3 style="margin:0 0 8px;font-size:12px;color:var(--vihrea);text-transform:uppercase;letter-spacing:.5px">Lomake 5 — Elinkeinotoiminnan veroilmoitus</h3>
+    <div class="alv-row"><span>Liikevaihto</span><span style="font-family:monospace">${fmt(vs.myyntiVeroton)} €</span></div>
+    <div class="alv-row"><span>Muut tulot</span><span style="font-family:monospace">${fmt(vs.muutTulot)} €</span></div>
+    <div class="alv-row"><span>Vähennyskelpoiset kulut</span><span style="font-family:monospace">${fmt(vs.menot)} €</span></div>
+    <div style="border-top:2px solid #2d7040;margin-top:5px;padding-top:5px">
+      <div class="alv-row bold korostus"><span>ELINKEINOTOIMINNAN TULOS</span><span style="font-family:monospace">${fmt(vs.tulos)} €</span></div>
+      <div class="alv-row"><span>Arvioitu vero</span><span style="font-family:monospace">${fmt(vero)} €</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:10px;overflow:hidden">
+    <div class="card-header" style="background:#444;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Kuukausierittely (liite)</div>
+    <table>
+      <thead><tr style="background:#f0ece0">${["Kk","Myynti","Muut","Kulut","Tulos","ALV"].map(h=>`<th class="${h!=="Kk"?"r":""}" style="padding:4px 8px;font-weight:bold;font-size:11px;color:#555">${h}</th>`).join("")}</tr></thead>
+      <tbody>${kkErittely}</tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:12px;background:#fffef8;border:1px solid var(--reunus);border-radius:6px;padding:12px 15px">
+    <div style="font-size:12px;font-weight:bold;margin-bottom:11px">Allekirjoitus ja päiväys</div>
+    <div style="display:flex;gap:30px;flex-wrap:wrap">
+      ${["Paikka ja päivämäärä","Elinkeinonharjoittajan allekirjoitus"].map(l=>`<div><div style="border-bottom:1px solid #888;width:195px;height:30px;margin-bottom:3px"></div><div style="font-size:10px;color:var(--harmaa)">${l}</div></div>`).join("")}
+    </div>
+  </div>`;
+}
+
+// ── MODAL RENDER ──────────────────────────────────────────────────────────────
+function renderModal(){
+  if(!state.modal)return"";
+  let sisältö="";
+
+  if(state.modal==="tosite"){
+    sisältö=`
+      <div class="modal-title">📎 Lisää tosite</div>
+      <div class="form-col">
+        <div><label class="lbl">Päivämäärä</label><input type="date" id="t-pvm" style="width:100%"/></div>
+        <div><label class="lbl">Kuvaus</label><input id="t-kuvaus" style="width:100%"/></div>
+        <div class="form-grid">
+          <div><label class="lbl">Tyyppi</label>
+            <select id="t-tyyppi" style="width:100%;padding:4px">
+              <option value="meno">Meno</option><option value="tulo">Tulo</option>
+            </select>
+          </div>
+          <div><label class="lbl">Kuukausi</label>
+            <select id="t-kk" style="width:100%;padding:4px">
+              ${KUUKAUDET.map((n,i)=>`<option value="${i}"${i===state.valittuKk?" selected":""}>${n}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div><label class="lbl">Kategoria</label>${menoKatSelect("muut","")}</div>
+        <div><label class="lbl">Summa (€)</label><input type="number" id="t-summa" style="width:100%;text-align:right" placeholder="0,00"/></div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn btn-prim" style="background:#888" onclick="setModal(null)">Peruuta</button>
+        <button class="btn btn-green" onclick="tallennaTositeModa()">Lisää</button>
+      </div>`;
+  }
+
+  return`<div class="modal-overlay" onclick="setModal(null)">
+    <div class="modal-box" onclick="event.stopPropagation()">${sisältö}</div>
+  </div>`;
+}
+
+// ── PÄÄNÄKYMÄ ─────────────────────────────────────────────────────────────────
+function renderApp(){
+  const vs=vuosiSummat();
+  const TABS=[
+    ["kuukaudet","📅 Kuukausittain"],
+    ["tuonti","🔄 Tuonti"],
+    ["alv","💶 ALV"],
+    ["yhteenveto","📊 Vuosikoonti"],
+    ["tilinpaatos","📋 Tilinpäätös"],
+  ];
+
+  let sisältö="";
+  if(state.tab==="kuukaudet") sisältö=renderKuukaudet();
+  else if(state.tab==="tuonti") sisältö=renderTuonti();
+  else if(state.tab==="alv") sisältö=renderAlv();
+  else if(state.tab==="yhteenveto") sisältö=renderYhteenveto();
+  else if(state.tab==="tilinpaatos") sisältö=renderTilinpäätös();
+
+  document.getElementById("app").innerHTML=`
+    <div>
+      <header class="header">
+        <div class="header-top">
+          <div>
+            <div class="header-nimi">⚓ ${state.yritys.nimi}</div>
+            <div class="header-sub">Y-tunnus ${state.yritys.ytunnus} · Kirjanpito ${VUOSI} · ${APP_VERSION}</div>
+          </div>
+          <div class="header-btns">
+            <span class="sync-badge${state.syncing?" syncing":""}">${state.syncing?"⟳ Synkronoidaan":"☁ Tallennettu"}</span>
+            <button class="btn btn-excel" onclick="vieCSV()">📊 CSV</button>
+            <button class="btn btn-warn btn" onclick="window.signOutUser()">Kirjaudu ulos</button>
+          </div>
+        </div>
+        <nav class="nav">
+          ${TABS.map(([id,lbl])=>`<button class="nav-btn${state.tab===id?" active":""}" onclick="setTab('${id}')">${lbl}</button>`).join("")}
+        </nav>
+      </header>
+      <main class="main">${sisältö}</main>
+      ${renderModal()}
+    </div>`;
+}
+
+function render(){
+  if(!state.user){renderLogin();return;}
+  renderApp();
+}
+
+function renderLogin(){
+  document.getElementById("app").innerHTML=`
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:20px;padding:20px">
+      <div style="text-align:center">
+        <div style="font-size:48px;margin-bottom:8px">⚓</div>
+        <h1 style="color:var(--vihrea);font-size:24px;margin-bottom:4px">J Sailing — Kirjanpito</h1>
+        <p style="color:var(--harmaa);font-size:13px">Tilikausi ${VUOSI} · Sama Firebase kuin tilaukset-sovellus</p>
+      </div>
+      <button onclick="kirjaudu()" style="background:var(--vihrea);color:#e8dcc0;border:none;padding:12px 28px;border-radius:8px;font-size:15px;cursor:pointer;font-family:var(--font)">
+        🔑 Kirjaudu Google-tilillä
+      </button>
+    </div>`;
+}
+
+// ── GLOBAALIT FUNKTIOT ────────────────────────────────────────────────────────
+window.setTab=t=>{state.tab=t;render();}
+window.setKk=i=>{state.valittuKk=i;render();}
+window.setModal=m=>{state.modal=m;render();}
+
+window.updKk=(k,v)=>{
+  const kk=state.valittuKk;
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  state.kkData[kk][k]=v;
+  tallenna(kk);
+  // Päivitä vain pikainfo ilman full render
+  const s=kkSumma(kk);
+  const pikat=document.querySelectorAll(".pika-arvo");
+  if(pikat[0]) pikat[0].textContent=fmt(s.myyntiVeroton)+" €";
+  if(pikat[1]) pikat[1].textContent=fmt(s.menot)+" €";
+  if(pikat[2]){pikat[2].textContent=fmt(s.tulos)+" €";pikat[2].style.color=tv(s.tulos);}
+  if(pikat[3]) pikat[3].textContent=fmt(s.alvMaksettava)+" €";
+}
+
+window.updRivi=(typ,idx,k,v)=>{
+  const kk=state.valittuKk;
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  const key=typ==="myynti"?"myyntiRivit":"ostoRivit";
+  state.kkData[kk][key][idx]={...state.kkData[kk][key][idx],[k]:typ==="myynti"&&k==="alvKanta"?Number(v):v};
+  tallenna(kk);
+  // Päivitä ALV-sarake ilman full render
+  const rivi=state.kkData[kk][key][idx];
+  const alv=(Number(rivi.veroton)||0)*rivi.alvKanta;
+  const rivit=document.querySelectorAll(typ==="myynti"?"tbody:first-of-type tr":"tbody:last-of-type tr");
+}
+
+window.updMeno=(id,v)=>{
+  const kk=state.valittuKk;
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  state.kkData[kk].menot[id]=v;
+  tallenna(kk);
+}
+
+window.lisääRivi=typ=>{
+  const kk=state.valittuKk;
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  const key=typ==="myynti"?"myyntiRivit":"ostoRivit";
+  state.kkData[kk][key].push({id:Date.now(),kuvaus:"",alvKanta:0.255,veroton:""});
+  tallenna(kk);render();
+}
+
+window.poistaRivi=(typ,idx)=>{
+  const kk=state.valittuKk;
+  const key=typ==="myynti"?"myyntiRivit":"ostoRivit";
+  state.kkData[kk][key].splice(idx,1);
+  tallenna(kk);render();
+}
+
+window.kopioi=()=>{
+  const kk=state.valittuKk;
+  if(kk===0)return;
+  const ed=state.kkData[kk-1]||tyhjäKk();
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  state.kkData[kk].menot={...ed.menot};
+  tallenna(kk);render();
+  showToast(`📋 Menot kopioitu ${KK3[kk-1]}:lta`);
+}
+
+window.tuoSailingById=id=>{const s=state.sailings.find(x=>x.id===id);if(s)tuoSailing(s);}
+window.tuoTutkintoById=id=>{const t=state.tutkinnot_tilaukset.find(x=>x.id===id);if(t)tuoTutkinto(t);}
+window.tuoLaskuById=id=>{const inv=state.invoices.find(x=>x.id===id);if(inv)tuoLasku(inv);}
+window.tuoKaikki=tuoKaikki;
+window.vieCSV=vieCSV;
+
+window.tallennaTositeModa=async()=>{
+  const t={
+    id:Date.now().toString(),
+    päivä:document.getElementById("t-pvm").value,
+    kuvaus:document.getElementById("t-kuvaus").value,
+    tyyppi:document.getElementById("t-tyyppi").value,
+    kuukausi:Number(document.getElementById("t-kk").value),
+    summa:document.getElementById("t-summa").value,
+    lisätty:new Date().toISOString(),
+  };
+  if(!t.kuvaus||!t.summa){showToast("⚠️ Täytä kuvaus ja summa");return;}
+  if(state.user){
+    await addDoc(collection(db,`kirjanpito/${VUOSI}/tositteet`),t);
+  }
+  if(t.tyyppi==="meno"&&t.summa){
+    const kk=t.kuukausi;
+    if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+    const ny=Number(state.kkData[kk].menot.muut||0);
+    state.kkData[kk].menot.muut=(ny+Number(t.summa)).toFixed(2);
+    await tallenna(kk);
+  }
+  showToast(`📎 Tosite tallennettu`);
+  setModal(null);
+};
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+window.kirjaudu=async()=>{
+  const provider=new GoogleAuthProvider();
+  try{await signInWithPopup(auth,provider);}
+  catch(e){showToast("Kirjautuminen epäonnistui: "+e.message);}
+}
+
+window.signOutUser=async()=>{
+  unsubs.forEach(u=>u());unsubs=[];
+  await signOut(auth);
+  state.user=null;state.kkData={};
+  render();
+}
+
+onAuthStateChanged(auth,user=>{
+  if(user&&user.email===ALLOWED_EMAIL){
+    state.user=user;
+    aloitaKuuntelu();
+    render();
+  } else if(user){
+    signOut(auth);
+    showToast("⛔ Ei oikeuksia: "+user.email);
+    renderLogin();
+  } else {
+    state.user=null;
+    renderLogin();
+  }
+});
+
+</script>
+</body>
+</html>
