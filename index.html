@@ -154,8 +154,18 @@ const FIREBASE_CONFIG={
   appId:"1:543523103696:web:439a312efa6aec398a8fd5"
 };
 const ALLOWED_EMAIL="jacke.seilaa@gmail.com";
-const APP_VERSION="V1.0";
+const APP_VERSION="V2.0-kokeilu";
 const VUOSI="2026";
+
+// ── LAKISÄÄTEISET VAKIOT ──────────────────────────────────────────────────────
+// Kirjanpitolaki: tositteet säilytettävä 6 vuotta tilikauden päättymisestä
+const SAILITYS_VUOSIA=6;
+// ALV-ilmoitusten eräpäivät kvartaaleittain
+const ALV_ERAPAIVAT=["12.4.2026","12.7.2026","12.10.2026","12.1.2027"];
+// Veroilmoituksen eräpäivä (Lomake 5)
+const VEROILMOITUS_ERAPAIVA="1.4.2027";
+// Ennakkoveron eräpäivät 2026
+const ENNAKKOVERO_ERAPAIVAT=["10.3.2026","10.6.2026","10.9.2026","10.11.2026"];
 
 // ── FIREBASE INIT ─────────────────────────────────────────────────────────────
 const app=initializeApp(FIREBASE_CONFIG);
@@ -187,15 +197,13 @@ const MENO_KAT=[
 
 // ── TILA ──────────────────────────────────────────────────────────────────────
 let state={
-  user:null, tab:"kuukaudet", valittuKk:new Date().getMonth(),
-  // Kirjanpitodata (Firestoressa per vuosi/kuukausi)
-  kkData:{}, // {0:{myyntiRivit:[],ostoRivit:[],menot:{},muutTulot:"",muistiinpanot:""},…}
-  // Tilaukset-sovelluksesta tuodut
+  user:null, tab:"dashboard", valittuKk:new Date().getMonth(),
+  kkData:{},
   sailings:[], tutkinnot_tilaukset:[], invoices:[],
-  // Omat laskut
   laskut:[], tositteet:[], asiakkaat:[],
-  // UI
   modal:null, syncing:false, syncMsg:"",
+  seuraavaTositeNro:1,
+  kmAjot:[], // Kilometrikorvausajot
   yritys:{nimi:"J Sailing / Jarmo",ytunnus:"1728993-9",iban:"FI62 1132 3000 4277 43",email:"jacke.seilaa@gmail.com",kotipaikka:"Loviisa"},
 };
 
@@ -350,60 +358,115 @@ function aloitaKuuntelu(){
     if(snap.exists()) state.yritys={...state.yritys,...snap.data()};
   });
   unsubs.push(uYritys);
+
+  // Km-ajot
+  const uKm=onSnapshot(doc(db,`kirjanpito/${VUOSI}/meta/kmajot`),snap=>{
+    if(snap.exists()) state.kmAjot=snap.data().ajot||[];
+    if(state.tab==="km"||state.tab==="dashboard") render();
+  });
+  unsubs.push(uKm);
+
+  // Tositenumero laskuri
+  const uNro=onSnapshot(doc(db,`kirjanpito/${VUOSI}/meta/laskurit`),snap=>{
+    if(snap.exists()&&snap.data().seuraavaTositeNro) state.seuraavaTositeNro=snap.data().seuraavaTositeNro;
+  });
+  unsubs.push(uNro);
 }
 
 // ── TUONTI TILAUKSET → KIRJANPITO ─────────────────────────────────────────────
+// Tilaukset-sovelluksen Firestore-rakenne (V9.11):
+//   sailings: {name, date, endDate, type, pricePerPerson, reservationFee, maxPersons, ...}
+//   customers: {name, phone, email, sailingId, tutkintoId, reservationStatus, billTo, companyId}
+//   invoices: {invoiceNo, invoiceDate, payerName, eventName, vatRatePct, net, vat, grossTotal, paid, itype}
+//   tutkinnot: {type, date, pricePerPerson, location, notes, maxPersons}
+//   companies: {name, businessId, email, commissionPct}
+
+// Laske purjehduksen kokonaistulo osallistujista
+function laskePurjehduksenTulo(sailing){
+  const vahvistetut=state.customers.filter(c=>c.sailingId===sailing.id&&c.reservationStatus==="paid");
+  const hinta=Number(sailing.pricePerPerson||0);
+  return vahvistetut.length * hinta;
+}
+
 async function tuoSailing(sailing){
-  const kk=new Date(sailing.date||sailing.startDate||sailing.pvm||Date.now()).getMonth();
+  const kk=new Date((sailing.date||today())+"T12:00:00").getMonth();
   if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  // Charter 10%, muut 25,5%
   const alvKanta=sailing.type==="Charter"?0.10:0.255;
-  const veroton=Number(sailing.totalPrice||sailing.hinta||sailing.price||0);
-  const uusiRivi={id:Date.now(),kuvaus:`${sailing.type||"Purjehdus"} — ${sailing.customer||sailing.asiakasNimi||""}`,alvKanta,veroton:veroton.toFixed(2)};
+  const vahvistetut=state.customers.filter(c=>c.sailingId===sailing.id&&c.reservationStatus==="paid");
+  const hinta=Number(sailing.pricePerPerson||0);
+  const veroton=vahvistetut.length * hinta || hinta; // fallback jos ei asiakkaita
+  const osallistujat=vahvistetut.length>0?vahvistetut.map(c=>c.name).join(", "):"";
+  const kuvaus=`${sailing.type||"Purjehdus"} — ${sailing.name||""}${osallistujat?` (${osallistujat})`:""}`;
+  const uusiRivi={id:Date.now(),kuvaus,alvKanta,veroton:veroton.toFixed(2),_sailingId:sailing.id};
   state.kkData[kk].myyntiRivit.push(uusiRivi);
   await tallenna(kk);
-  showToast(`⛵ ${sailing.type||"Purjehdus"} tuotu ${KUUKAUDET[kk]}lle`);
+  showToast(`⛵ ${sailing.name||sailing.type} tuotu ${KUUKAUDET[kk]}lle — ${veroton.toFixed(2)} €`);
   render();
 }
 
 async function tuoTutkinto(t){
-  const kk=new Date(t.date||t.pvm||Date.now()).getMonth();
+  const kk=new Date((t.date||today())+"T12:00:00").getMonth();
   if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
-  const veroton=Number(t.hinta||t.price||t.amount||0);
-  const uusiRivi={id:Date.now(),kuvaus:`Tutkinto: ${t.type||t.tyyppi||"Tutkinto"} — ${t.participant||t.osallistuja||""}`,alvKanta:0,veroton:veroton.toFixed(2)};
+  // Tutkinnot ALV 0% (viranomaistutkinnot)
+  const vahvistetut=state.customers.filter(c=>c.tutkintoId===t.id&&c.reservationStatus==="paid");
+  const hinta=Number(t.pricePerPerson||0);
+  const veroton=vahvistetut.length * hinta || hinta;
+  const osallistujat=vahvistetut.length>0?vahvistetut.map(c=>c.name).join(", "):"";
+  const kuvaus=`Tutkinto: ${t.type||""}${t.boatType?" ("+t.boatType+")":""}${osallistujat?" — "+osallistujat:""}`;
+  const uusiRivi={id:Date.now(),kuvaus,alvKanta:0,veroton:veroton.toFixed(2),_tutkintoId:t.id};
   state.kkData[kk].myyntiRivit.push(uusiRivi);
   await tallenna(kk);
-  showToast(`⚓ Tutkinto tuotu ${KUUKAUDET[kk]}lle`);
+  showToast(`⚓ Tutkinto tuotu ${KUUKAUDET[kk]}lle — ${veroton.toFixed(2)} €`);
   render();
 }
 
 async function tuoLasku(inv){
-  const kk=new Date(inv.invoiceDate||inv.date||Date.now()).getMonth();
+  const kk=new Date((inv.invoiceDate||today())+"T12:00:00").getMonth();
   if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
-  const veroton=Number(inv.totalExVat||inv.amount||inv.summa||0);
-  const alvKanta=Number(inv.vatRate||inv.alv||0.255);
-  const uusiRivi={id:Date.now(),kuvaus:`Lasku ${inv.invoiceNumber||inv.nro||""} — ${inv.customerName||inv.asiakas||""}`,alvKanta,veroton:veroton.toFixed(2)};
+  // Käytä tilaukset-sovelluksen laskun nettoarvoa suoraan
+  const veroton=Number(inv.net||0);
+  // vatRatePct tulee tilaukset-sovelluksesta suoraan (25.5 tai 13.5)
+  const alvKanta=Number(inv.vatRatePct||25.5)/100;
+  // Älä tuo hyvityslaskuja tai varausmaksuja tulona — ne kirjataan erikseen
+  if(inv.isCredit||inv.itype==="credit") return;
+  const kuvaus=`Lasku ${inv.invoiceNo||""} — ${inv.payerName||""} — ${inv.eventName||""}`;
+  const uusiRivi={id:Date.now(),kuvaus,alvKanta,veroton:veroton.toFixed(2),_invoiceId:inv.id};
   state.kkData[kk].myyntiRivit.push(uusiRivi);
   await tallenna(kk);
-  showToast(`🧾 Lasku tuotu ${KUUKAUDET[kk]}lle`);
+  showToast(`🧾 Lasku ${inv.invoiceNo} tuotu ${KUUKAUDET[kk]}lle — ${veroton.toFixed(2)} €`);
   render();
 }
 
 async function tuoKaikki(){
-  // Maksetut purjehdukset joita ei ole vielä tuotu
-  const tuodut=new Set(Object.values(state.kkData).flatMap(d=>d.myyntiRivit.map(r=>r.sailingId)).filter(Boolean));
+  // Kerää jo tuodut ID:t (vältetään duplikaatit)
+  const tuodutSailing=new Set(Object.values(state.kkData).flatMap(d=>d.myyntiRivit.map(r=>r._sailingId)).filter(Boolean));
+  const tuodutInvoice=new Set(Object.values(state.kkData).flatMap(d=>d.myyntiRivit.map(r=>r._invoiceId)).filter(Boolean));
+  const tuodutTutkinto=new Set(Object.values(state.kkData).flatMap(d=>d.myyntiRivit.map(r=>r._tutkintoId)).filter(Boolean));
   let lkm=0;
-  for(const s of state.sailings){
-    if(!tuodut.has(s.id)&&(s.status==="paid"||s.tila==="maksettu"||s.paymentStatus==="paid")){
-      await tuoSailing(s); lkm++;
-    }
-  }
-  // Maksetut laskut
+
+  // Tuo maksetut laskut tilaukset-sovelluksesta (ensisijainen lähde)
   for(const inv of state.invoices){
-    if(!tuodut.has(inv.id)&&(inv.status==="paid"||inv.tila==="maksettu")){
-      await tuoLasku(inv); lkm++;
-    }
+    if(tuodutInvoice.has(inv.id)) continue;
+    if(!inv.paid) continue; // vain maksetut
+    if(inv.isCredit||inv.itype==="credit") continue; // ei hyvityslaskuja
+    const vuosi=String(inv.invoiceDate||"").slice(0,4);
+    if(vuosi!==VUOSI) continue; // vain oikea vuosi
+    await tuoLasku(inv); lkm++;
   }
-  showToast(`✅ Tuotiin ${lkm} merkintää kirjanpitoon`);
+
+  // Tuo tutkinnot joilla on hinta mutta joita ei ole laskutettu
+  for(const t of state.tutkinnot){
+    if(tuodutTutkinto.has(t.id)) continue;
+    if(!t.pricePerPerson||Number(t.pricePerPerson)===0) continue;
+    const vuosi=String(t.date||"").slice(0,4);
+    if(vuosi!==VUOSI) continue;
+    const vahvistetut=state.customers.filter(c=>c.tutkintoId===t.id&&c.reservationStatus==="paid");
+    if(vahvistetut.length===0) continue;
+    await tuoTutkinto(t); lkm++;
+  }
+
+  showToast(lkm>0?`✅ Tuotiin ${lkm} merkintää kirjanpitoon`:"ℹ️ Ei uusia tuotavia merkintöjä");
   render();
 }
 
@@ -843,15 +906,20 @@ function renderModal(){
   let sisältö="";
 
   if(state.modal==="tosite"){
+    const tnro=`T${VUOSI}-${String(state.seuraavaTositeNro).padStart(4,"0")}`;
     sisältö=`
       <div class="modal-title">📎 Lisää tosite</div>
+      <div style="background:#e8f4ec;border:1px solid #2d7040;border-radius:5px;padding:6px 10px;margin-bottom:10px;font-size:11px">
+        📋 Tositenumero: <strong style="font-family:monospace">${tnro}</strong> 
+        <span style="color:var(--harmaa)">(KPL vaatimus — säilytä ${new Date(Number(VUOSI)+SAILITYS_VUOSIA+1,0,1).toLocaleDateString("fi-FI")} asti)</span>
+      </div>
       <div class="form-col">
-        <div><label class="lbl">Päivämäärä</label><input type="date" id="t-pvm" style="width:100%"/></div>
-        <div><label class="lbl">Kuvaus</label><input id="t-kuvaus" style="width:100%"/></div>
+        <div><label class="lbl">Päivämäärä *</label><input type="date" id="t-pvm" style="width:100%"/></div>
+        <div><label class="lbl">Kuvaus *</label><input id="t-kuvaus" style="width:100%" placeholder="esim. Purjeiden huolto, Satamamaksu Loviisa"/></div>
         <div class="form-grid">
           <div><label class="lbl">Tyyppi</label>
             <select id="t-tyyppi" style="width:100%;padding:4px">
-              <option value="meno">Meno</option><option value="tulo">Tulo</option>
+              <option value="meno">Meno (kulu)</option><option value="tulo">Tulo (myynti)</option>
             </select>
           </div>
           <div><label class="lbl">Kuukausi</label>
@@ -861,11 +929,19 @@ function renderModal(){
           </div>
         </div>
         <div><label class="lbl">Kategoria</label>${menoKatSelect("muut","")}</div>
-        <div><label class="lbl">Summa (€)</label><input type="number" id="t-summa" style="width:100%;text-align:right" placeholder="0,00"/></div>
+        <div class="form-grid">
+          <div><label class="lbl">Summa (€, veroton)</label><input type="number" id="t-summa" style="width:100%;text-align:right" placeholder="0,00"/></div>
+          <div><label class="lbl">ALV-kanta</label>
+            <select id="t-alv" style="width:100%;padding:4px">
+              ${ALV_KANNAT.map(k=>`<option value="${k.value}">${k.label}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div><label class="lbl">Toimittaja / Maksaja</label><input id="t-toimittaja" style="width:100%" placeholder="esim. Lindells, Satama Oy"/></div>
       </div>
       <div class="modal-btns">
         <button class="btn btn-prim" style="background:#888" onclick="setModal(null)">Peruuta</button>
-        <button class="btn btn-green" onclick="tallennaTositeModa()">Lisää</button>
+        <button class="btn btn-green" onclick="tallennaTositeModa()">💾 Tallenna tosite ${tnro}</button>
       </div>`;
   }
 
@@ -874,20 +950,188 @@ function renderModal(){
   </div>`;
 }
 
+// ── LAKISÄÄTEISET MUISTUTUKSET ────────────────────────────────────────────────
+function maaraaikamuistutukset(){
+  const tänään=new Date();
+  const muistutukset=[];
+  // ALV-ilmoitukset
+  ALV_ERAPAIVAT.forEach((ep,i)=>{
+    const d=new Date(ep.split(".").reverse().join("-"));
+    const paivia=Math.ceil((d-tänään)/86400000);
+    if(paivia>0&&paivia<=30) muistutukset.push({tyyppi:"alv",teksti:`⚠️ ALV Q${i+1} eräpäivä ${ep} — ${paivia} pv`,väri:"#fef3c7",raja:"#c8a060"});
+    else if(paivia<=0&&paivia>-7) muistutukset.push({tyyppi:"alv",teksti:`🚨 ALV Q${i+1} erääntyi ${ep}!`,väri:"#fee2e2",raja:"#e08080"});
+  });
+  // Veroilmoitus
+  const vi=new Date(VEROILMOITUS_ERAPAIVA.split(".").reverse().join("-"));
+  const viPv=Math.ceil((vi-tänään)/86400000);
+  if(viPv>0&&viPv<=60) muistutukset.push({tyyppi:"vero",teksti:`📋 Veroilmoitus (Lomake 5) eräpäivä ${VEROILMOITUS_ERAPAIVA} — ${viPv} pv`,väri:"#e8f0ff",raja:"#a0b8e8"});
+  // Ennakkovero
+  ENNAKKOVERO_ERAPAIVAT.forEach((ep,i)=>{
+    const d=new Date(ep.split(".").reverse().join("-"));
+    const pv=Math.ceil((d-tänään)/86400000);
+    if(pv>0&&pv<=14) muistutukset.push({tyyppi:"ennakko",teksti:`🏛 Ennakkovero ${i+1}. erä eräpäivä ${ep} — ${pv} pv`,väri:"#fef3c7",raja:"#c8a060"});
+  });
+  return muistutukset;
+}
+
+function tositeNro(){
+  const nro=String(state.seuraavaTositeNro).padStart(4,"0");
+  state.seuraavaTositeNro++;
+  return`T${VUOSI}-${nro}`;
+}
+
+// ── KM-KORVAUKSET ─────────────────────────────────────────────────────────────
+const KM_KORVAUS_2026=0.55; // Verohallinto 2026
+function laskeKmKorvaus(km){return Number(km||0)*KM_KORVAUS_2026;}
+
+function renderKmKorvaukset(){
+  const ajot=state.kmAjot||[];
+  const yht=ajot.reduce((s,a)=>s+Number(a.km||0),0);
+  const korvaus=laskeKmKorvaus(yht);
+  return`
+  <h2 style="color:var(--vihrea);margin:0 0 4px">Kilometrikorvaukset ${VUOSI}</h2>
+  <p style="font-size:11px;color:var(--harmaa);margin:0 0 12px">Verohallinto 2026: <strong>${KM_KORVAUS_2026.toFixed(2)} €/km</strong> · Omalla autolla tehdyt työajot</p>
+
+  <div style="background:#e8f4ec;border:1px solid #2d7040;border-radius:8px;padding:12px 16px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <div><div style="font-size:9px;text-transform:uppercase;color:#555;margin-bottom:2px">Ajoja yhteensä</div><div style="font-size:20px;font-weight:bold;color:var(--vihrea)">${ajot.length} kpl</div></div>
+    <div><div style="font-size:9px;text-transform:uppercase;color:#555;margin-bottom:2px">Kilometriä yhteensä</div><div style="font-size:20px;font-weight:bold;color:var(--vihrea)">${fmt(yht,0)} km</div></div>
+    <div><div style="font-size:9px;text-transform:uppercase;color:#555;margin-bottom:2px">Korvaus yhteensä</div><div style="font-size:20px;font-weight:bold;color:var(--vihrea)">${fmt(korvaus)} €</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header" style="background:var(--vihrea)">+ Lisää ajo</div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end">
+        <div><label class="lbl">Päivä</label><input type="date" id="km-pvm" style="width:100%"/></div>
+        <div><label class="lbl">Lähtö → Kohde</label><input id="km-reitti" style="width:100%" placeholder="Riihimäki → Loviisa"/></div>
+        <div><label class="lbl">Km</label><input type="number" id="km-km" style="width:100%;text-align:right" placeholder="0"/></div>
+        <div><label class="lbl">Tarkoitus</label><input id="km-tarkoitus" style="width:100%" placeholder="J Sailing kurssi"/></div>
+        <button class="btn btn-green" onclick="lisääKmAjo()" style="margin-bottom:1px">+ Lisää</button>
+      </div>
+    </div>
+  </div>
+
+  ${ajot.length===0?`<div style="color:var(--harmaa);text-align:center;padding:20px">Ei ajoja vielä</div>`:`
+  <div class="card" style="overflow:hidden">
+    <table>
+      <thead><tr style="background:var(--vihrea);color:#e8dcc0">
+        ${["Päivä","Reitti","Km","Tarkoitus","Korvaus €",""].map(h=>`<th style="padding:6px 10px;font-weight:normal;font-size:11px;${h==="Km"||h==="Korvaus €"?"text-align:right":""}">${h}</th>`).join("")}
+      </tr></thead>
+      <tbody>
+        ${ajot.map((a,i)=>`
+          <tr class="${i%2===0?"tr-even-g":"tr-odd-g"}">
+            <td style="padding:5px 10px;white-space:nowrap">${fmtD(a.pvm)}</td>
+            <td style="padding:5px 10px">${a.reitti||"—"}</td>
+            <td style="padding:5px 10px;text-align:right;font-family:monospace">${fmt(Number(a.km||0),0)}</td>
+            <td style="padding:5px 10px;font-size:11px;color:var(--harmaa)">${a.tarkoitus||""}</td>
+            <td style="padding:5px 10px;text-align:right;font-family:monospace;font-weight:bold;color:var(--vihrea)">${fmt(laskeKmKorvaus(a.km))}</td>
+            <td style="padding:4px 8px"><button class="btn-del" onclick="poistaKmAjo(${i})">×</button></td>
+          </tr>`).join("")}
+      </tbody>
+      <tfoot><tr style="background:#e8f0e8;border-top:2px solid #2d7040;font-weight:bold">
+        <td colspan="2" style="padding:6px 10px">YHTEENSÄ</td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace">${fmt(yht,0)} km</td>
+        <td style="padding:6px 10px"></td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace;color:var(--vihrea);font-size:14px">${fmt(korvaus)} €</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div style="margin-top:10px;background:#e8f4ec;border:1px solid #2d7040;border-radius:6px;padding:9px 13px;font-size:11px;color:#2d5030">
+    💡 Kilometrikorvaus on <strong>verovapaa</strong> — ei kirjata tuloksi. Kirjaa korvaus matkakuluihin: 
+    <button class="btn btn-sm" style="background:var(--vihrea);margin-left:8px" onclick="kirjaaKmMenoksi()">📤 Kirjaa ${fmt(korvaus)} € matkakuluihin</button>
+  </div>`}`;
+}
+
+function renderDashboard(){
+  const vs=vuosiSummat();
+  const muistutukset=maaraaikamuistutukset();
+  const nytKk=new Date().getMonth();
+  const nytS=kkSumma(nytKk);
+  // Tositteiden säilytysmuistutus
+  const sailytysPaattyy=new Date(Number(VUOSI)+SAILITYS_VUOSIA+1,0,1).toLocaleDateString("fi-FI");
+
+  return`
+  <h2 style="color:var(--vihrea);margin:0 0 12px">Hallintapaneeli — ${VUOSI}</h2>
+
+  ${muistutukset.length>0?`<div style="margin-bottom:14px">${muistutukset.map(m=>`
+    <div style="background:${m.väri};border:1px solid ${m.raja};border-radius:7px;padding:9px 13px;margin-bottom:6px;font-size:12px;font-weight:600;cursor:pointer" onclick="setTab('alv')">
+      ${m.teksti}
+    </div>`).join("")}</div>`:""}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+    <div class="pika" style="min-width:auto"><div class="pika-label">Liikevaihto ${VUOSI}</div><div class="pika-arvo bold" style="color:var(--plus);font-size:16px">${fmt(vs.myyntiVeroton)} €</div></div>
+    <div class="pika" style="min-width:auto"><div class="pika-label">Kulut ${VUOSI}</div><div class="pika-arvo bold" style="color:var(--minus);font-size:16px">${fmt(vs.menot)} €</div></div>
+    <div class="pika" style="min-width:auto"><div class="pika-label">Tulos ${VUOSI}</div><div class="pika-arvo bold" style="color:${tv(vs.tulos)};font-size:16px">${fmt(vs.tulos)} €</div></div>
+    <div class="pika" style="min-width:auto"><div class="pika-label">Tositteet</div><div class="pika-arvo bold" style="font-size:16px">${state.tositteet.length} kpl</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+    <div class="card">
+      <div class="card-header" style="background:#1a5028">📅 ${KUUKAUDET[nytKk]} ${VUOSI}</div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          ${[["Myynti",nytS.myyntiVeroton,"var(--plus)"],["Kulut",nytS.menot,"var(--minus)"],["Tulos",nytS.tulos,tv(nytS.tulos)],["ALV",nytS.alvMaksettava,"#7a5010"]].map(([l,v,c])=>`
+          <div style="text-align:center;padding:6px;background:#f8fff8;border-radius:5px">
+            <div style="font-size:9px;text-transform:uppercase;color:var(--harmaa)">${l}</div>
+            <div style="font-size:14px;font-weight:bold;font-family:monospace;color:${c}">${fmt(v)} €</div>
+          </div>`).join("")}
+        </div>
+        <button class="btn btn-green" style="width:100%;margin-top:8px" onclick="setTab('kuukaudet')">Kirjaa ${KUUKAUDET[nytKk]} →</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" style="background:#3a3a2a">⚖️ Lakisääteiset velvoitteet</div>
+      <div class="card-body">
+        <div style="font-size:11px;line-height:1.8">
+          <div>📎 Tositteiden säilytys: <strong>6 vuotta</strong></div>
+          <div style="color:var(--harmaa);font-size:10px;margin-left:16px">Säilytä vähintään <strong>${sailytysPaattyy}</strong> asti</div>
+          <div style="margin-top:4px">📋 Veroilmoitus: <strong>${VEROILMOITUS_ERAPAIVA}</strong></div>
+          <div style="margin-top:4px">💶 ALV-ilmoitukset: <strong>neljännesvuosittain</strong></div>
+          <div style="color:var(--harmaa);font-size:10px;margin-left:16px">Q1: 12.4 · Q2: 12.7 · Q3: 12.10 · Q4: 12.1</div>
+          <div style="margin-top:4px">🏛 Ennakkovero: <strong>4 kertaa/vuosi</strong></div>
+          <div style="color:var(--harmaa);font-size:10px;margin-left:16px">3/3 · 10/6 · 10/9 · 10/11</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="background:#555">⚡ Pikakirjaus</div>
+    <div class="card-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-green" onclick="setTab('kuukaudet')">📅 Kuukausikirjanpito</button>
+        <button class="btn btn-prim" style="background:#7a4a10" onclick="setModal('tosite')">📎 + Tosite</button>
+        <button class="btn btn-prim" style="background:#2d5a8a" onclick="setTab('km')">🚗 + Km-ajo</button>
+        <button class="btn btn-prim" style="background:#1a5028" onclick="setTab('tuonti')">🔄 Tuo tilaukset</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#fffef8;border:1px solid var(--reunus);border-radius:6px;padding:10px 13px;font-size:11px;color:var(--harmaa)">
+    ⚠️ <strong>Kokeiluversio V2.0</strong> — Tämä on harjoitteluohjelma. Virallinen kirjanpito aloitetaan kun tuot nykyiset tulos- ja taselaskelmat sisään. Ohjelma ei korvaa ammattitilitoimistoa — suositellaan tarkistuttamaan tiedot kirjanpitäjällä.
+  </div>`;
+}
+
 // ── PÄÄNÄKYMÄ ─────────────────────────────────────────────────────────────────
 function renderApp(){
   const vs=vuosiSummat();
   const TABS=[
+    ["dashboard","🧭 Dashboard"],
     ["kuukaudet","📅 Kuukausittain"],
     ["tuonti","🔄 Tuonti"],
+    ["km","🚗 Km-korvaukset"],
     ["alv","💶 ALV"],
     ["yhteenveto","📊 Vuosikoonti"],
     ["tilinpaatos","📋 Tilinpäätös"],
   ];
 
   let sisältö="";
-  if(state.tab==="kuukaudet") sisältö=renderKuukaudet();
+  if(state.tab==="dashboard") sisältö=renderDashboard();
+  else if(state.tab==="kuukaudet") sisältö=renderKuukaudet();
   else if(state.tab==="tuonti") sisältö=renderTuonti();
+  else if(state.tab==="km") sisältö=renderKmKorvaukset();
   else if(state.tab==="alv") sisältö=renderAlv();
   else if(state.tab==="yhteenveto") sisältö=renderYhteenveto();
   else if(state.tab==="tilinpaatos") sisältö=renderTilinpäätös();
@@ -1004,28 +1248,74 @@ window.tuoKaikki=tuoKaikki;
 window.vieCSV=vieCSV;
 
 window.tallennaTositeModa=async()=>{
+  const pvm=document.getElementById("t-pvm").value;
+  const kuvaus=document.getElementById("t-kuvaus").value;
+  const summa=document.getElementById("t-summa").value;
+  const tyyppi=document.getElementById("t-tyyppi").value;
+  const kk=Number(document.getElementById("t-kk").value);
+  const alvKanta=Number(document.getElementById("t-alv")?.value||0);
+  const toimittaja=document.getElementById("t-toimittaja")?.value||"";
+  if(!kuvaus||!summa){showToast("⚠️ Täytä kuvaus ja summa");return;}
+  const nro=tositeNro();
   const t={
-    id:Date.now().toString(),
-    päivä:document.getElementById("t-pvm").value,
-    kuvaus:document.getElementById("t-kuvaus").value,
-    tyyppi:document.getElementById("t-tyyppi").value,
-    kuukausi:Number(document.getElementById("t-kk").value),
-    summa:document.getElementById("t-summa").value,
+    id:Date.now().toString(), nro, pvm, kuvaus, summa, tyyppi, kk,
+    alvKanta, toimittaja,
     lisätty:new Date().toISOString(),
+    sailytysParattyy:new Date(Number(VUOSI)+SAILITYS_VUOSIA+1,0,1).toISOString(),
   };
-  if(!t.kuvaus||!t.summa){showToast("⚠️ Täytä kuvaus ja summa");return;}
-  if(state.user){
-    await addDoc(collection(db,`kirjanpito/${VUOSI}/tositteet`),t);
+  if(state.user) await addDoc(collection(db,`kirjanpito/${VUOSI}/tositteet`),t);
+  else state.tositteet.push(t);
+  if(tyyppi==="meno"&&summa){
+    const katEl=document.querySelector("#t-kategoria select")||document.querySelector("[id='t-kategoria']");
+    const kat=katEl?.value||"muut";
+    const kk2=kk;
+    if(!state.kkData[kk2]) state.kkData[kk2]=tyhjäKk();
+    const ny=Number(state.kkData[kk2].menot[kat]||0);
+    state.kkData[kk2].menot[kat]=(ny+Number(summa)).toFixed(2);
+    await tallenna(kk2);
   }
-  if(t.tyyppi==="meno"&&t.summa){
-    const kk=t.kuukausi;
-    if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
-    const ny=Number(state.kkData[kk].menot.muut||0);
-    state.kkData[kk].menot.muut=(ny+Number(t.summa)).toFixed(2);
-    await tallenna(kk);
-  }
-  showToast(`📎 Tosite tallennettu`);
+  showToast(`📎 Tosite ${nro} tallennettu — säilytä ${new Date(Number(VUOSI)+SAILITYS_VUOSIA+1,0,1).toLocaleDateString("fi-FI")} asti`);
   setModal(null);
+};
+
+window.lisääKmAjo=async()=>{
+  const pvm=document.getElementById("km-pvm")?.value||"";
+  const reitti=document.getElementById("km-reitti")?.value||"";
+  const km=document.getElementById("km-km")?.value||"";
+  const tarkoitus=document.getElementById("km-tarkoitus")?.value||"";
+  if(!km||!reitti){showToast("⚠️ Täytä reitti ja km");return;}
+  const ajo={id:Date.now().toString(),pvm,reitti,km:Number(km),tarkoitus,korvaus:laskeKmKorvaus(km)};
+  if(!state.kmAjot) state.kmAjot=[];
+  state.kmAjot.push(ajo);
+  if(state.user){
+    const ref=doc(db,`kirjanpito/${VUOSI}/meta/kmajot`);
+    await setDoc(ref,{ajot:state.kmAjot},{merge:false});
+  }
+  showToast(`🚗 ${fmt(Number(km),0)} km lisätty — korvaus ${fmt(laskeKmKorvaus(km))} €`);
+  render();
+};
+
+window.poistaKmAjo=async(idx)=>{
+  if(!confirm("Poistetaanko ajo?"))return;
+  state.kmAjot.splice(idx,1);
+  if(state.user){
+    const ref=doc(db,`kirjanpito/${VUOSI}/meta/kmajot`);
+    await setDoc(ref,{ajot:state.kmAjot},{merge:false});
+  }
+  render();
+};
+
+window.kirjaaKmMenoksi=async()=>{
+  const yht=state.kmAjot.reduce((s,a)=>s+Number(a.km||0),0);
+  const korvaus=laskeKmKorvaus(yht);
+  if(korvaus<=0){showToast("Ei ajoja kirjattavaksi");return;}
+  const kk=state.valittuKk;
+  if(!state.kkData[kk]) state.kkData[kk]=tyhjäKk();
+  const ny=Number(state.kkData[kk].menot.matkat||0);
+  state.kkData[kk].menot.matkat=(ny+korvaus).toFixed(2);
+  await tallenna(kk);
+  showToast(`✅ ${fmt(korvaus)} € km-korvaukset kirjattu matkakuluihin (${KUUKAUDET[kk]})`);
+  render();
 };
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
