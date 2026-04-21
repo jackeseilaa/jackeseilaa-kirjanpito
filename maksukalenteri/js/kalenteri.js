@@ -8,6 +8,7 @@ export const state = {
   taksitulot: [],
   tab: 'kalenteri',
   historia: false,
+  filter: 'kaikki', // 'kaikki' | 'pakko' | 'tulot'
   unsubs: [],
   undoQueue: null,
   lightMode: localStorage.getItem('lightMode') === '1',
@@ -124,41 +125,72 @@ function formatPvmShort(iso) {
 export function renderKalenteri(container) {
   const { eraantyvat, myohassa } = tarkistaEraantyminen(state.maksut);
   const saldolliset = laskeSaldot(state.maksut, state.asetukset.kassasaldo);
-  const avoimet = saldolliset.filter(m => m.status !== 'Maksettu');
+  let avoimet = saldolliset.filter(m => m.status !== 'Maksettu');
   const maksetut = state.maksut.filter(m => m.status === 'Maksettu');
+
+  // Suodatus
+  if (state.filter === 'pakko') {
+    avoimet = avoimet.filter(m =>
+      m.prioriteetti === 'PAKKO' || m.status === 'KRIITTINEN' ||
+      m.status === 'Intrumilla' || m.status === 'Ropolla'
+    );
+  } else if (state.filter === 'tulot') {
+    avoimet = avoimet.filter(m => m.tyyppi === 'TULO');
+  }
+
   const ryhmat = ryhmitaKuukausittain(avoimet);
+  const td = today();
 
   let html = '';
 
   // Varoitusbanneri
   if (myohassa.length > 0) {
-    html += `<div class="alert-banner danger">⚠️ ${myohassa.length} maksua myöhässä!</div>`;
+    const myohassSumma = myohassa.reduce((s,m) => s + Number(m.summa||0), 0);
+    html += `<div class="alert-banner danger">⚠️ ${myohassa.length} maksua myöhässä — yhteensä ${formatEur(myohassSumma)} €</div>`;
   } else if (eraantyvat.length > 0) {
     html += `<div class="alert-banner warning">⏰ ${eraantyvat.length} kriittistä maksua erääntyy 3 päivän sisällä</div>`;
   }
 
+  // Pikasuodattimet
+  const filterBtns = [
+    { id: 'kaikki', label: 'Kaikki' },
+    { id: 'pakko',  label: '🔴 PAKKO' },
+    { id: 'tulot',  label: '🟢 Tulot' },
+  ].map(f => `
+    <button onclick="window._setFilter('${f.id}')"
+      style="border:none;padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;
+             background:${state.filter===f.id ? 'var(--accent)' : 'var(--bg3)'};
+             color:${state.filter===f.id ? 'white' : 'var(--text2)'};
+             border:1px solid ${state.filter===f.id ? 'var(--accent)' : 'var(--border)'};
+             transition:all .15s">
+      ${f.label}
+    </button>`).join('');
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${filterBtns}</div>`;
+
   // Kuukausiryhmät
   const kkJarjestys = Object.keys(ryhmat).sort();
   if (kkJarjestys.length === 0) {
-    html += `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">Ei avoimia maksuja</div></div>`;
+    html += `<div class="empty-state"><div class="empty-icon">${state.filter !== 'kaikki' ? '🔍' : '✅'}</div>
+      <div class="empty-text">${state.filter !== 'kaikki' ? 'Ei maksuja tällä suodattimella' : 'Ei avoimia maksuja'}</div></div>`;
   }
 
   for (const kk of kkJarjestys) {
     const lista = ryhmat[kk];
     const tulot = lista.filter(m => m.tyyppi === 'TULO').reduce((s, m) => s + Number(m.summa || 0), 0);
     const menot = lista.filter(m => m.tyyppi !== 'TULO').reduce((s, m) => s + Number(m.summa || 0), 0);
+    const netto = tulot - menot;
     html += `
       <div class="kk-header">
         <span class="kk-title">${kkNimi(kk)}</span>
         <span class="kk-summary">
           <span style="color:var(--green)">+${formatEur(tulot)}</span>
-          &nbsp;
-          <span style="color:var(--red)">-${formatEur(menot)}</span>
+          &nbsp;<span style="color:var(--red)">−${formatEur(menot)}</span>
+          &nbsp;<span style="color:${netto>=0?'var(--green)':'var(--red)'}">= ${netto>=0?'+':''}${formatEur(netto)}</span>
         </span>
       </div>
     `;
     for (const m of lista) {
-      html += renderMaksuRivi(m);
+      html += renderMaksuRivi(m, td);
     }
   }
 
@@ -185,12 +217,15 @@ export function renderKalenteri(container) {
 }
 
 // ── MAKSU-RIVI HTML ───────────────────────────────────────────────────────────
-function renderMaksuRivi(m) {
+function renderMaksuRivi(m, td) {
   const luokka = maksuLuokka(m);
   const badge = badgeLuokka(m);
   const badgeTxt = badgeTeksti(m);
   const { paiva, kk: kkStr } = pvmLabel(m.pvm);
   const summaLuokka = m.tyyppi === 'TULO' ? 'tulo' : 'meno';
+  const tday = td || today();
+  const isToday = m.pvm === tday;
+  const isOverdue = m.status !== 'Maksettu' && m.pvm < tday;
   const etuMerkki = m.tyyppi === 'TULO' ? '+' : '-';
 
   let saldoHtml = '';
@@ -206,17 +241,22 @@ function renderMaksuRivi(m) {
         <button class="btn-danger" style="padding:5px 8px;font-size:11px" onclick="window._poista('${m.id}','${(m.nimi||'').replace(/'/g,"\\'")}')">🗑</button>
        </div>`
     : `<div class="maksu-actions">
-        <button class="btn-peru" onclick="window._peruKuittaus('${m.id}','${m.status}')">↩ Peru</button>
+        <button class="btn-peru" onclick="window._peruKuittaus('${m.id}','${m.vanha_status||'Avoinna'}')">↩ Peru</button>
        </div>`;
 
+  const todayBorder = isToday ? 'box-shadow:0 0 0 2px var(--accent);' : '';
+  const pvmStyle = isOverdue ? 'color:var(--red)' : isToday ? 'color:var(--accent)' : '';
+
   return `
-    <div class="maksu-card ${luokka}" data-id="${m.id}">
+    <div class="maksu-card ${luokka}" data-id="${m.id}" style="${todayBorder}">
       <div class="swipe-hint-right">✓</div>
       <div class="swipe-hint-left">✎</div>
       <div class="maksu-inner">
-        <div>
-          <div class="maksu-pvm">${paiva}</div>
+        <div style="min-width:36px;text-align:center">
+          <div class="maksu-pvm" style="${pvmStyle}">${paiva}</div>
           <div class="maksu-pvm-kk">${kkStr}</div>
+          ${isToday ? `<div style="font-size:8px;color:var(--accent);font-weight:700;letter-spacing:.5px">TÄNÄÄN</div>` : ''}
+          ${isOverdue && m.status !== 'Maksettu' ? `<div style="font-size:8px;color:var(--red);font-weight:700">RÄSTI</div>` : ''}
         </div>
         <div class="maksu-info">
           <div class="maksu-nimi">${m.nimi || '—'}</div>
@@ -359,6 +399,14 @@ export function renderYhteenveto(container) {
   }
 
   container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:16px;font-weight:700">Yhteenveto 2026</span>
+      <button onclick="window._exportCSV()"
+        style="background:var(--green2);color:white;border:none;padding:6px 14px;
+               border-radius:6px;font-size:12px;cursor:pointer">
+        ⬇ Vie CSV
+      </button>
+    </div>
     <div class="summary-grid">
       <div class="summary-card">
         <div class="summary-card-label">Tulot yhteensä</div>
@@ -400,6 +448,7 @@ export function renderYhteenveto(container) {
 
 // ── AVOIMET LASKUT -NÄKYMÄ ────────────────────────────────────────────────────
 export function renderAvoimet(container) {
+  const td = today();
   const avoimet = state.maksut
     .filter(m => m.status !== 'Maksettu' && m.tyyppi !== 'TULO')
     .sort((a, b) => {
@@ -411,18 +460,58 @@ export function renderAvoimet(container) {
     });
 
   const kriittiset = avoimet.filter(m => m.status === 'KRIITTINEN' || m.status === 'Intrumilla' || m.status === 'Ropolla');
-  const normaalit = avoimet.filter(m => m.status !== 'KRIITTINEN' && m.status !== 'Intrumilla' && m.status !== 'Ropolla');
-  const summa = avoimet.reduce((s, m) => s + Number(m.summa || 0), 0);
+  const normaalit  = avoimet.filter(m => m.status !== 'KRIITTINEN' && m.status !== 'Intrumilla' && m.status !== 'Ropolla');
+  const myohassa   = avoimet.filter(m => m.pvm < td);
+  const summa      = avoimet.reduce((s, m) => s + Number(m.summa || 0), 0);
+  const myohassSumma = myohassa.reduce((s, m) => s + Number(m.summa || 0), 0);
+
+  // Velkoja-yhteenveto
+  const velkojaMap = {};
+  for (const m of avoimet) {
+    const k = m.kenelle || 'Muu';
+    velkojaMap[k] = (velkojaMap[k] || 0) + Number(m.summa || 0);
+  }
+  const velkojaLista = Object.entries(velkojaMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, s]) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:6px 10px;border-bottom:1px solid rgba(42,63,82,.4);font-size:13px">
+        <span style="color:var(--text2)">${k}</span>
+        <span style="font-family:var(--mono);font-weight:600;color:var(--red)">
+          ${formatEur(s)} €
+        </span>
+      </div>`).join('');
 
   let html = `
     <div class="section-header">
       <span class="section-title">Avoimet laskut</span>
       <span class="section-badge" style="color:var(--red)">${avoimet.length} kpl — ${formatEur(summa)} €</span>
     </div>
+    ${myohassa.length > 0 ? `
+      <div class="alert-banner danger" style="margin-bottom:12px">
+        ⚠️ Myöhässä: ${myohassa.length} laskua — ${formatEur(myohassSumma)} €
+      </div>` : ''}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
+                margin-bottom:16px;overflow:hidden">
+      <div style="padding:10px 12px;font-size:11px;color:var(--text2);
+                  text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);
+                  background:var(--bg3)">
+        Erittely velkojan mukaan
+      </div>
+      ${velkojaLista}
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;
+                  font-weight:700;font-size:14px">
+        <span>Yhteensä</span>
+        <span style="font-family:var(--mono);color:var(--red)">${formatEur(summa)} €</span>
+      </div>
+    </div>
   `;
 
   if (kriittiset.length > 0) {
-    html += `<div style="font-size:12px;color:var(--red);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:700">Kriittiset / Perintä</div>`;
+    html += `<div style="font-size:12px;color:var(--red);text-transform:uppercase;
+                         letter-spacing:1px;margin-bottom:8px;font-weight:700">
+               Kriittiset / Perintä
+             </div>`;
     for (const m of kriittiset) {
       html += renderAvoinKortti(m, true);
     }

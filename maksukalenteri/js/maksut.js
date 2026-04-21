@@ -54,10 +54,11 @@ export async function poistaMaksu(id) {
   return deleteDoc(doc(db, 'maksut', id));
 }
 
-export async function kuittaaMaksetuksi(id) {
+export async function kuittaaMaksetuksi(id, vanhaStatus) {
   return updateDoc(doc(db, 'maksut', id), {
     status: 'Maksettu',
     maksettu_pvm: today(),
+    vanha_status: vanhaStatus || 'Avoinna',
     paivitetty: serverTimestamp(),
   });
 }
