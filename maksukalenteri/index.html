@@ -99,6 +99,26 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(console.warn);
 }
 
+// ── LOADING TIMEOUT — jos Firebase ei vastaa 12s, näytä virhe ────────────────
+const loadingTimeout = setTimeout(() => {
+  const el = document.getElementById('loading');
+  if (el && el.style.display !== 'none') {
+    el.innerHTML = `
+      <div style="text-align:center;padding:24px;max-width:320px">
+        <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">Yhteys epäonnistui</div>
+        <div style="font-size:13px;color:#8fa8bc;margin-bottom:20px">
+          Firebase ei vastannut. Tarkista internet-yhteys ja yritä uudelleen.
+        </div>
+        <button onclick="location.reload()"
+          style="background:#3a8fd4;color:white;border:none;padding:12px 24px;
+                 border-radius:8px;font-size:15px;cursor:pointer;width:100%">
+          🔄 Lataa uudelleen
+        </button>
+      </div>`;
+  }
+}, 12000);
+
 // ── OFFLINE ───────────────────────────────────────────────────────────────────
 window.addEventListener('online',  () => document.getElementById('offline-bar').style.display = 'none');
 window.addEventListener('offline', () => document.getElementById('offline-bar').style.display = 'block');
@@ -106,6 +126,7 @@ window.addEventListener('offline', () => document.getElementById('offline-bar').
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 initAuth(
   user => {
+    clearTimeout(loadingTimeout);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
@@ -113,6 +134,7 @@ initAuth(
     startApp();
   },
   err => {
+    clearTimeout(loadingTimeout);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('auth-screen').style.display = 'flex';
     if (err) {
