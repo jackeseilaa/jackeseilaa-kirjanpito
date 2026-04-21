@@ -213,6 +213,7 @@ export function renderKalenteri(container) {
   }
 
   container.innerHTML = html;
+  attachCardActions(container);
   attachSwipeHandlers();
 }
 
@@ -234,14 +235,21 @@ function renderMaksuRivi(m, td) {
     saldoHtml = `<div class="maksu-saldo-after ${sCls}">→ ${formatEur(m.saldoJalkeen)} €</div>`;
   }
 
+  const nimiEsc = (m.nimi || '').replace(/"/g, '&quot;');
+  const vanhaStatus = m.vanha_status || 'Avoinna';
+
   const actions = m.status !== 'Maksettu'
     ? `<div class="maksu-actions">
-        <button class="btn-kuittaa" onclick="window._kuittaa('${m.id}','${m.status}')">✓ Maksettu</button>
-        <button class="btn-muokkaa" onclick="window._muokkaa('${m.id}')">✎</button>
-        <button class="btn-danger" style="padding:5px 8px;font-size:11px" onclick="window._poista('${m.id}','${(m.nimi||'').replace(/'/g,"\\'")}')">🗑</button>
+        <button type="button" class="btn-kuittaa"
+          data-action="kuittaa" data-id="${m.id}" data-vanha="${m.status}">✓ Maksettu</button>
+        <button type="button" class="btn-muokkaa"
+          data-action="muokkaa" data-id="${m.id}">✎</button>
+        <button type="button" class="btn-danger" style="padding:5px 8px;font-size:11px"
+          data-action="poista" data-id="${m.id}" data-nimi="${nimiEsc}">🗑</button>
        </div>`
     : `<div class="maksu-actions">
-        <button class="btn-peru" onclick="window._peruKuittaus('${m.id}','${m.vanha_status||'Avoinna'}')">↩ Peru</button>
+        <button type="button" class="btn-peru"
+          data-action="peru" data-id="${m.id}" data-vanha="${vanhaStatus}">↩ Peru</button>
        </div>`;
 
   const todayBorder = isToday ? 'box-shadow:0 0 0 2px var(--accent);' : '';
@@ -529,6 +537,7 @@ export function renderAvoimet(container) {
   }
 
   container.innerHTML = html;
+  attachCardActions(container);
 }
 
 function renderAvoinKortti(m, kriitt) {
@@ -544,11 +553,47 @@ function renderAvoinKortti(m, kriitt) {
       </div>
       ${m.huomio ? `<div class="avoin-huomio">${m.huomio}</div>` : ''}
       <div style="display:flex;gap:6px;margin-top:8px">
-        <button class="btn-kuittaa" style="max-width:140px" onclick="window._kuittaa('${m.id}','${m.status}')">✓ Maksettu</button>
-        <button class="btn-muokkaa" onclick="window._muokkaa('${m.id}')">✎ Muokkaa</button>
+        <button type="button" class="btn-kuittaa" style="max-width:140px"
+          data-action="kuittaa" data-id="${m.id}" data-vanha="${m.status}">✓ Maksettu</button>
+        <button type="button" class="btn-muokkaa"
+          data-action="muokkaa" data-id="${m.id}">✎ Muokkaa</button>
       </div>
     </div>
   `;
+}
+
+// ── EVENT DELEGAATIO: KAIKKI KORTTIEN NAPIT ──────────────────────────────────
+// Yksi kuuntelija per container — ei inline onclickeja, toimii luotettavasti iOS:lla
+export function attachCardActions(container) {
+  // Poista vanha kuuntelija jos olemassa
+  if (container._cardActionHandler) {
+    container.removeEventListener('click', container._cardActionHandler);
+  }
+
+  container._cardActionHandler = function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+
+    // Estä tapahtuman leviäminen swipe-handlereille
+    e.stopPropagation();
+
+    const action = btn.dataset.action;
+    const id     = btn.dataset.id;
+    const vanha  = btn.dataset.vanha || 'Avoinna';
+    const nimi   = btn.dataset.nimi  || '';
+
+    if (action === 'kuittaa') window._kuittaa(id, vanha);
+    else if (action === 'peru')   window._peruKuittaus(id, vanha);
+    else if (action === 'muokkaa') window._muokkaa(id);
+    else if (action === 'poista')  window._poista(id, nimi);
+  };
+
+  container.addEventListener('click', container._cardActionHandler);
+
+  // Avoimet-kortit (ei swipejä, mutta sama delegaatio)
+  container.querySelectorAll('.avoin-card [data-action]').forEach(btn => {
+    btn.dataset._delegated = '1';
+  });
 }
 
 // ── SWIPE GESTURES ────────────────────────────────────────────────────────────
@@ -560,6 +605,8 @@ export function attachSwipeHandlers() {
     let isDragging = false;
 
     card.addEventListener('touchstart', e => {
+      // Älä käynnistä swipeä jos kosketus alkaa napin päältä
+      if (e.target.closest('[data-action]')) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       dx = 0;
@@ -567,6 +614,7 @@ export function attachSwipeHandlers() {
     }, { passive: true });
 
     card.addEventListener('touchmove', e => {
+      if (e.target.closest('[data-action]')) return;
       dx = e.touches[0].clientX - startX;
       const dy = Math.abs(e.touches[0].clientY - startY);
       if (Math.abs(dx) > dy + 5) {
@@ -577,10 +625,12 @@ export function attachSwipeHandlers() {
       }
     }, { passive: true });
 
-    card.addEventListener('touchend', () => {
+    card.addEventListener('touchend', e => {
+      if (e.target.closest('[data-action]')) return;
       card.style.transition = '';
       card.style.transform = '';
       if (!isDragging) return;
+      isDragging = false;
       const id = card.dataset.id;
       if (dx > 60) {
         const m = state.maksut.find(x => x.id === id);
