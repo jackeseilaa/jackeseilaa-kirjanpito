@@ -47,9 +47,10 @@
         <div class="header-version" id="header-user"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
+        <button class="header-btn" id="btn-tuonti">📥 Tuo</button>
         <button class="header-btn" id="btn-theme">🌙</button>
         <button class="header-btn" id="btn-seed" style="display:none">Seed</button>
-        <button class="header-btn" id="btn-logout">Kirjaudu ulos</button>
+        <button class="header-btn" id="btn-logout">Ulos</button>
       </div>
     </div>
     <nav class="nav-tabs">
@@ -89,7 +90,8 @@ import {
   state, renderTab, renderSaldoWidget,
   naytaMaksuModal, naytaSaldoModal, naytaUndo,
   attachSwipeHandlers, showToast,
-  renderKalenteri, renderTaksitulot, renderYhteenveto, renderAvoimet
+  renderKalenteri, renderTaksitulot, renderYhteenveto, renderAvoimet,
+  naytaTuontiModal, tuontiEsikatselu
 } from './js/kalenteri.js';
 
 // ── SERVICE WORKER ────────────────────────────────────────────────────────────
@@ -218,6 +220,10 @@ function startApp() {
     naytaMaksuModal(null);
   });
 
+  document.getElementById('btn-tuonti').addEventListener('click', () => {
+    naytaTuontiModal();
+  });
+
   // Theme toggle
   document.getElementById('btn-theme').addEventListener('click', () => {
     state.lightMode = !state.lightMode;
@@ -276,9 +282,17 @@ window._kuittaa = async (id, vanhaStatus) => {
 };
 
 window._peruKuittaus = async (id, vanhaStatus) => {
+  const palautus = vanhaStatus || 'Avoinna';
   try {
-    await peruKuittaus(id, vanhaStatus || 'Avoinna');
-    showToast('Kuittaus peruttu', 'warning');
+    await peruKuittaus(id, palautus);
+    // Päivitä paikallinen tila heti — älä odota Firestore-kuuntelijaa
+    state.maksut = state.maksut.map(m =>
+      m.id === id ? { ...m, status: palautus, maksettu_pvm: null } : m
+    );
+    state.historia = false; // Sulje historia jotta maksu näkyy listassa
+    renderSaldoWidget();
+    renderTab();
+    showToast('↩ Maksu palautettu listaan', 'success');
   } catch(e) {
     showToast('Virhe: ' + e.message, 'error');
   }
@@ -401,6 +415,32 @@ window._exportCSV = () => {
   a.click();
   URL.revokeObjectURL(url);
   showToast('CSV ladattu', 'success');
+};
+
+window._tuontiEsikatselu = () => tuontiEsikatselu();
+
+window._tuontiTallenna = async (parsed) => {
+  const checkboxes = document.querySelectorAll('.tuonti-check');
+  const valitut = parsed.filter((_, i) => {
+    const cb = document.querySelector(`.tuonti-check[data-idx="${i}"]`);
+    return cb ? cb.checked : true;
+  });
+  if (!valitut.length) { showToast('Valitse ainakin yksi rivi', 'error'); return; }
+
+  const btn = document.querySelector('.modal-box .btn-prim:last-child');
+  if (btn) { btn.textContent = '⏳ Tuodaan...'; btn.disabled = true; }
+
+  let ok = 0, virhe = 0;
+  for (const m of valitut) {
+    try {
+      await lisaaMaksu({ ...m, luotu: undefined });
+      ok++;
+    } catch(e) {
+      virhe++;
+    }
+  }
+  window._suljeModal();
+  showToast(`✅ Tuotu ${ok} maksua${virhe ? ` (${virhe} virhe)` : ''}`, ok > 0 ? 'success' : 'error', 5000);
 };
 
 // Modal suljetaan taustaa klikkaamalla

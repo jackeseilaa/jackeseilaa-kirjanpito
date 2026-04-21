@@ -201,16 +201,25 @@ body {
 }
 .maksu-card::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-  width: 4px;
+  width: 5px;
 }
-.maksu-card.pakko::before { background: var(--red); }
-.maksu-card.kriittinen::before { background: var(--red); }
-.maksu-card.intrumilla::before { background: var(--purple); }
-.maksu-card.ropolla::before { background: var(--purple); }
-.maksu-card.avoinna::before { background: var(--orange); }
+/* PAKKO/kriittiset — punainen tausta + paksu reuna */
+.maksu-card.pakko      { background: rgba(232,64,64,.10); border-color: rgba(232,64,64,.35); }
+.maksu-card.kriittinen { background: rgba(232,64,64,.15); border-color: rgba(232,64,64,.5); }
+.maksu-card.intrumilla { background: rgba(144,96,208,.10); border-color: rgba(144,96,208,.4); }
+.maksu-card.ropolla    { background: rgba(144,96,208,.10); border-color: rgba(144,96,208,.4); }
+.maksu-card.pakko::before      { background: var(--red);    width: 6px; }
+.maksu-card.kriittinen::before { background: var(--red);    width: 6px; }
+.maksu-card.intrumilla::before { background: var(--purple); width: 6px; }
+.maksu-card.ropolla::before    { background: var(--purple); width: 6px; }
+/* Tulot — vihreä tausta */
+.maksu-card.tulo { background: rgba(46,184,106,.10); border-color: rgba(46,184,106,.35); }
 .maksu-card.tulo::before { background: var(--green); }
+/* Avoinna — oranssi reuna */
+.maksu-card.avoinna::before { background: var(--orange); }
+/* Maksettu — himmennetty */
 .maksu-card.maksettu::before { background: var(--text3); }
-.maksu-card.maksettu { opacity: .5; }
+.maksu-card.maksettu { opacity: .45; }
 .maksu-card.maksettu .maksu-nimi { text-decoration: line-through; }
 
 .maksu-card.swipe-right { transform: translateX(80px); opacity: .7; }

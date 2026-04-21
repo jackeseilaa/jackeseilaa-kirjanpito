@@ -773,3 +773,162 @@ export function naytaUndo(id, vanhaStatus, nimi) {
   }, 5000);
   state.undoQueue = { id, vanhaStatus, timer };
 }
+
+// ── TUONTIMODAALI ─────────────────────────────────────────────────────────────
+export function naytaTuontiModal() {
+  const html = `
+    <div class="modal-overlay" id="modal">
+      <div class="modal-box" onclick="event.stopPropagation()" style="max-width:600px;width:96vw">
+        <div class="modal-title">📥 Tuo maksuja</div>
+
+        <div style="background:rgba(58,143,212,.1);border:1px solid rgba(58,143,212,.3);
+                    border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;
+                    color:var(--text2);line-height:1.6">
+          <strong>Ohjeet:</strong><br>
+          1. Avaa Excel ja kopioi rivit (Ctrl+C)<br>
+          2. Liitä alle (Ctrl+V) — TAI lataa CSV-tiedosto<br>
+          <br>
+          <strong>Sarakkeiden järjestys (pakollinen):</strong><br>
+          <code style="font-size:11px;color:var(--accent)">
+            Päivämäärä | Nimi | Summa | Tyyppi | Prioriteetti | Kenelle | Huomio
+          </code><br>
+          <span style="font-size:10px;color:var(--text3)">
+            Päivämäärä: 27.4.2026 tai 2026-04-27 &nbsp;|&nbsp;
+            Tyyppi: MENO tai TULO &nbsp;|&nbsp;
+            Prioriteetti: PAKKO / Normaali / Tulo
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Lataa CSV-tiedosto</label>
+          <input type="file" id="tuonti-file" accept=".csv,.txt,.tsv"
+            class="form-input" style="cursor:pointer">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tai liitä Excelistä suoraan</label>
+          <textarea id="tuonti-teksti" class="form-input" rows="8"
+            placeholder="Liitä Excel-rivit tähän...&#10;Esim:&#10;27.4.2026	YEL erä 12/2025	76,17	MENO	PAKKO	ETK	Erä 12/2025"
+            style="font-family:var(--mono);font-size:12px;resize:vertical"></textarea>
+        </div>
+
+        <div id="tuonti-esikatselu" style="display:none;margin-bottom:12px"></div>
+
+        <div class="modal-btns">
+          <button type="button" class="btn-sec" onclick="window._suljeModal()">Peruuta</button>
+          <button type="button" class="btn-prim" id="tuonti-esikatselu-btn"
+            onclick="window._tuontiEsikatselu()">Esikatsele</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+
+  document.getElementById('tuonti-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const teksti = await file.text();
+    document.getElementById('tuonti-teksti').value = teksti;
+  });
+}
+
+// Parsii rivin → maksu-objekti
+function parseTuontiRivi(rivi) {
+  // Tuki: tab-eroteltu (Excel) tai semicolon/pilkku (CSV)
+  const sep = rivi.includes('\t') ? '\t' : rivi.includes(';') ? ';' : ',';
+  const osat = rivi.split(sep).map(s => s.trim().replace(/^["']|["']$/g, ''));
+  if (osat.length < 3) return null;
+
+  let [pvmRaw, nimi, summaRaw, tyyppiRaw, priRaw, kenelle, huomio] = osat;
+  if (!pvmRaw || !nimi || !summaRaw) return null;
+
+  // Päivämäärä: 27.4.2026 → 2026-04-27
+  let pvm = pvmRaw;
+  const pvmMatch = pvmRaw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (pvmMatch) {
+    pvm = `${pvmMatch[3]}-${pvmMatch[2].padStart(2,'0')}-${pvmMatch[1].padStart(2,'0')}`;
+  } else if (!/^\d{4}-\d{2}-\d{2}$/.test(pvmRaw)) {
+    return null; // Ei tunnisteta päivämäärää
+  }
+
+  // Summa: "76,17" tai "76.17" → numero
+  const summa = parseFloat(summaRaw.replace(',', '.'));
+  if (isNaN(summa) || summa <= 0) return null;
+
+  const tyyppi = (tyyppiRaw || '').toUpperCase() === 'TULO' ? 'TULO' : 'MENO';
+  const prioriteetti = ['PAKKO','Normaali','Tulo'].includes(priRaw) ? priRaw
+                     : tyyppi === 'TULO' ? 'Tulo' : 'PAKKO';
+  const status = tyyppi === 'TULO' ? 'Tuleva' : 'Avoinna';
+  const kategoria = tyyppi === 'TULO' ? 'Tulo' : 'Lasku';
+
+  return {
+    pvm, nimi: nimi || '', summa, tyyppi, prioriteetti, status,
+    kategoria, kenelle: kenelle || '', huomio: huomio || '',
+    maksettu_pvm: null
+  };
+}
+
+export function tuontiEsikatselu() {
+  const teksti = document.getElementById('tuonti-teksti')?.value?.trim();
+  if (!teksti) { showToast('Lisää ensin data', 'error'); return; }
+
+  const rivit = teksti.split('\n').filter(r => r.trim());
+  const parsed = [];
+  const virheet = [];
+
+  rivit.forEach((rivi, i) => {
+    const m = parseTuontiRivi(rivi);
+    if (m) parsed.push(m);
+    else if (rivi.trim()) virheet.push(i + 1);
+  });
+
+  if (!parsed.length) {
+    showToast('Ei tunnistettavia rivejä. Tarkista muoto.', 'error');
+    return;
+  }
+
+  // Esikatselu-taulukko
+  const rivitHtml = parsed.map((m, i) => `
+    <tr>
+      <td><input type="checkbox" class="tuonti-check" data-idx="${i}" checked></td>
+      <td style="font-family:var(--mono);font-size:12px">${m.pvm}</td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.nimi}</td>
+      <td style="font-family:var(--mono);font-size:12px;text-align:right;
+                 color:${m.tyyppi==='TULO'?'var(--green)':'var(--red)'}">
+        ${m.tyyppi==='TULO'?'+':'−'}${m.summa.toFixed(2).replace('.',',')} €
+      </td>
+      <td><span style="font-size:10px;padding:2px 5px;border-radius:4px;
+                       background:${m.prioriteetti==='PAKKO'?'rgba(232,64,64,.2)':'rgba(46,184,106,.15)'}">
+        ${m.prioriteetti}</span></td>
+    </tr>`).join('');
+
+  const esikatselu = document.getElementById('tuonti-esikatselu');
+  esikatselu.style.display = '';
+  esikatselu.innerHTML = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">
+      Löydettiin <strong style="color:var(--green)">${parsed.length} maksua</strong>
+      ${virheet.length ? `— <span style="color:var(--orange)">${virheet.length} riviä ohitettu</span>` : ''}
+    </div>
+    <div style="max-height:240px;overflow-y:auto;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg2)">
+          <th style="padding:6px 8px;width:28px">
+            <input type="checkbox" id="tuonti-kaikki" checked
+              onchange="document.querySelectorAll('.tuonti-check').forEach(c=>c.checked=this.checked)">
+          </th>
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2)">Päivä</th>
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2)">Nimi</th>
+          <th style="padding:6px 8px;text-align:right;font-size:11px;color:var(--text2)">Summa</th>
+          <th style="padding:6px 8px;font-size:11px;color:var(--text2)">Pri</th>
+        </tr></thead>
+        <tbody>${rivitHtml}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button type="button" class="btn-sec" onclick="window._suljeModal()">Peruuta</button>
+      <button type="button" class="btn-prim"
+        onclick="window._tuontiTallenna(${JSON.stringify(parsed).replace(/</g,'\\u003c')})">
+        📥 Tuo valitut
+      </button>
+    </div>
+  `;
+}
