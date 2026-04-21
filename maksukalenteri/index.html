@@ -142,16 +142,43 @@ function startApp() {
   // Theme
   if (state.lightMode) document.body.classList.add('light-mode');
 
+  // URL-param: ?seed=1 näyttää seed-napin heti
+  if (new URLSearchParams(location.search).get('seed') === '1') {
+    document.getElementById('btn-seed').style.display = '';
+  }
+
+  let firstSnapshot = true;
+
   // Firestore kuuntelijat
   const u1 = kuunteleMaksut(maksut => {
     state.maksut = maksut;
+
+    // Ensimmäisellä vastauksella: jos tyhjä → näytä seed-nappi ja ohje
+    if (firstSnapshot) {
+      firstSnapshot = false;
+      if (maksut.length === 0) {
+        document.getElementById('btn-seed').style.display = '';
+        const main = document.getElementById('main-content');
+        if (main) main.innerHTML = `
+          <div style="text-align:center;padding:48px 20px">
+            <div style="font-size:56px;margin-bottom:16px">💰</div>
+            <div style="font-size:20px;font-weight:700;margin-bottom:8px">Tervetuloa Maksukalenteriin!</div>
+            <div style="color:var(--text2);font-size:14px;margin-bottom:24px">Lataa alkudata napauttamalla alla olevaa nappia.</div>
+            <button class="btn-prim" style="max-width:280px;margin:0 auto;display:block" onclick="document.getElementById('btn-seed').click()">
+              📥 Lataa seed-data (2026)
+            </button>
+          </div>`;
+        return;
+      }
+    }
+
     renderSaldoWidget();
     renderTab();
   });
   const u2 = kuunteleAsetukset(asetukset => {
     state.asetukset = asetukset;
     renderSaldoWidget();
-    renderTab();
+    if (state.maksut.length > 0) renderTab();
   });
   const u3 = kuunteleTaksitulot(taksitulot => {
     state.taksitulot = taksitulot;
@@ -183,14 +210,24 @@ function startApp() {
   });
   document.getElementById('btn-theme').textContent = state.lightMode ? '☀️' : '🌙';
 
-  // Seed-nappi (kehityskäyttöön)
+  // Seed-nappi
   document.getElementById('btn-seed').addEventListener('click', async () => {
-    if (!confirm('Lataa seed-data Firestoreen? (Toimii vain jos kollekkio on tyhjä)')) return;
+    const btn = document.getElementById('btn-seed');
+    btn.textContent = '⏳';
+    btn.disabled = true;
     try {
       const ok = await runSeed();
-      showToast(ok ? 'Seed-data ladattu!' : 'Seed jo tehty aiemmin.', ok ? 'success' : 'warning');
+      if (ok) {
+        showToast('✅ Seed-data ladattu! Kalenteri päivittyy hetken kuluttua.', 'success', 5000);
+        btn.style.display = 'none';
+      } else {
+        showToast('Seed jo tehty aiemmin — data on jo Firestoressä.', 'warning');
+        btn.style.display = 'none';
+      }
     } catch(e) {
-      showToast('Seed epäonnistui: ' + e.message, 'error');
+      showToast('Seed epäonnistui: ' + e.message, 'error', 6000);
+      btn.textContent = 'Seed';
+      btn.disabled = false;
     }
   });
 }

@@ -1,4 +1,4 @@
-import { formatEur, parsePvm, today, lisaaMaksu, paivitaMaksu, poistaMaksu, kuittaaMaksetuksi, peruKuittaus, paivitaSaldo, paivitaTaksitulo, kuunteleMaksut, kuunteleAsetukset, kuunteleTaksitulot } from './maksut.js';
+import { formatEur, parsePvm, today, paivitaTaksitulo } from './maksut.js';
 import { laskeSaldot, ryhmitaKuukausittain, seuraavaKriittinen, tarkistaEraantyminen, laskuKuukausittain } from './saldo.js';
 
 // ── GLOBAALI TILA ─────────────────────────────────────────────────────────────
