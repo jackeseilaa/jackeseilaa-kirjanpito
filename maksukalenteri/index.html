@@ -147,43 +147,60 @@ function startApp() {
     document.getElementById('btn-seed').style.display = '';
   }
 
-  let firstSnapshot = true;
+  // Seuraa onko molemmat kriittiset kuuntelijat saatu kerran
+  let maksutReady = false;
+  let asetuksetReady = false;
+  let welcoming = false; // estää render-flikkerin tervetulosivulla
+
+  function tryRender() {
+    if (!maksutReady) return; // odotetaan aina vähintään maksut
+    renderSaldoWidget();
+    if (!welcoming) renderTab();
+  }
 
   // Firestore kuuntelijat
   const u1 = kuunteleMaksut(maksut => {
     state.maksut = maksut;
 
-    // Ensimmäisellä vastauksella: jos tyhjä → näytä seed-nappi ja ohje
-    if (firstSnapshot) {
-      firstSnapshot = false;
-      if (maksut.length === 0) {
+    if (!maksutReady) {
+      maksutReady = true;
+      // Ensikäynnistys: tyhjä kollekkio → näytä tervetulo
+      if (maksut.length === 0 && !localStorage.getItem('seeded')) {
+        welcoming = true;
         document.getElementById('btn-seed').style.display = '';
         const main = document.getElementById('main-content');
         if (main) main.innerHTML = `
           <div style="text-align:center;padding:48px 20px">
             <div style="font-size:56px;margin-bottom:16px">💰</div>
             <div style="font-size:20px;font-weight:700;margin-bottom:8px">Tervetuloa Maksukalenteriin!</div>
-            <div style="color:var(--text2);font-size:14px;margin-bottom:24px">Lataa alkudata napauttamalla alla olevaa nappia.</div>
-            <button class="btn-prim" style="max-width:280px;margin:0 auto;display:block" onclick="document.getElementById('btn-seed').click()">
-              📥 Lataa seed-data (2026)
+            <div style="color:var(--text2);font-size:14px;margin-bottom:24px">
+              Ladataan 2026 maksudata Firestoreen ensimmäisellä käynnistyksellä.
+            </div>
+            <button class="btn-prim" style="max-width:280px;margin:0 auto;display:block"
+              onclick="document.getElementById('btn-seed').click()">
+              📥 Lataa alkudata (2026)
             </button>
           </div>`;
         return;
       }
+      // Kun data saapuu seeding-operaation jälkeen, poistu tervetulotilasta
+      if (welcoming && maksut.length > 0) welcoming = false;
     }
 
-    renderSaldoWidget();
-    renderTab();
+    tryRender();
   });
+
   const u2 = kuunteleAsetukset(asetukset => {
     state.asetukset = asetukset;
-    renderSaldoWidget();
-    if (state.maksut.length > 0) renderTab();
+    asetuksetReady = true;
+    tryRender();
   });
+
   const u3 = kuunteleTaksitulot(taksitulot => {
     state.taksitulot = taksitulot;
-    if (state.tab === 'taksitulot') renderTab();
+    if (state.tab === 'taksitulot' && maksutReady) renderTab();
   });
+
   state.unsubs.push(u1, u2, u3);
 
   // Tab-navigointi
@@ -213,21 +230,33 @@ function startApp() {
   // Seed-nappi
   document.getElementById('btn-seed').addEventListener('click', async () => {
     const btn = document.getElementById('btn-seed');
+    const main = document.getElementById('main-content');
     btn.textContent = '⏳';
     btn.disabled = true;
+    if (main) main.innerHTML = `
+      <div style="text-align:center;padding:48px 20px">
+        <div class="loader-ring" style="margin:0 auto 16px"></div>
+        <div style="color:var(--text2);font-size:14px">Ladataan 2026 maksuja Firestoreen…<br>
+        <span style="font-size:12px;color:var(--text3)">Tämä kestää hetken (~40 dokumenttia)</span></div>
+      </div>`;
     try {
       const ok = await runSeed();
+      localStorage.setItem('seeded', '1');
+      btn.style.display = 'none';
       if (ok) {
-        showToast('✅ Seed-data ladattu! Kalenteri päivittyy hetken kuluttua.', 'success', 5000);
-        btn.style.display = 'none';
+        showToast('✅ Seed-data ladattu! Kalenteri päivittyy nyt.', 'success', 5000);
       } else {
-        showToast('Seed jo tehty aiemmin — data on jo Firestoressä.', 'warning');
-        btn.style.display = 'none';
+        showToast('Data oli jo Firestoressä — ladataan kalenteri.', 'warning', 4000);
       }
+      // Pakota render
+      welcoming = false;
+      renderSaldoWidget();
+      renderTab();
     } catch(e) {
       showToast('Seed epäonnistui: ' + e.message, 'error', 6000);
       btn.textContent = 'Seed';
       btn.disabled = false;
+      if (main) main.innerHTML = `<div class="alert-banner danger">Virhe: ${e.message}</div>`;
     }
   });
 }
@@ -348,6 +377,47 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') window._suljeModal();
 });
+
+// ── PAIKALLINEN ERÄPÄIVÄMUISTUTUS (ei push, toimii selaimessa) ───────────────
+function tarkistaLocalNotifikaatiot() {
+  if (!('Notification' in window)) return;
+  const td = new Date().toISOString().split('T')[0];
+  const kolme = new Date();
+  kolme.setDate(kolme.getDate() + 3);
+  const kolmeStr = kolme.toISOString().split('T')[0];
+
+  const eraantyvat = state.maksut.filter(m =>
+    m.status !== 'Maksettu' &&
+    m.pvm >= td && m.pvm <= kolmeStr &&
+    (m.prioriteetti === 'PAKKO' || m.status === 'KRIITTINEN')
+  );
+  if (!eraantyvat.length) return;
+
+  const viimeisin = localStorage.getItem('notif_shown');
+  const tanaan = td;
+  if (viimeisin === tanaan) return; // näytetty jo tänään
+
+  if (Notification.permission === 'granted') {
+    eraantyvat.slice(0, 3).forEach(m => {
+      new Notification('Maksukalenteri — eräpäivä lähestyy', {
+        body: `${m.nimi}: ${Number(m.summa).toLocaleString('fi-FI', {minimumFractionDigits:2})} € — ${m.pvm}`,
+        icon: './icons/icon-192.png',
+        tag: m.id,
+      });
+    });
+    localStorage.setItem('notif_shown', tanaan);
+  } else if (Notification.permission === 'default') {
+    // Pyydä lupa vain jos on erääntyviä
+    Notification.requestPermission().then(perm => {
+      if (perm === 'granted') tarkistaLocalNotifikaatiot();
+    });
+  }
+}
+
+// Tarkista notifikaatiot kun data latautuu (viiveellä jotta UI ehtii renderöityä)
+setTimeout(() => {
+  if (state.maksut.length > 0) tarkistaLocalNotifikaatiot();
+}, 3000);
 </script>
 </body>
 </html>

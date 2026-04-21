@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Vain jacke.seilaa@gmail.com pääsee kaikkiin dokumentteihin
+    function isJarmo() {
+      return request.auth != null &&
+             request.auth.token.email == 'jacke.seilaa@gmail.com' &&
+             request.auth.token.email_verified == true;
+    }
+
+    match /maksut/{docId} {
+      allow read, write: if isJarmo();
+    }
+
+    match /taksitulot/{docId} {
+      allow read, write: if isJarmo();
+    }
+
+    match /asetukset/{docId} {
+      allow read, write: if isJarmo();
+    }
+
+    // Kielletty kaikki muu
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

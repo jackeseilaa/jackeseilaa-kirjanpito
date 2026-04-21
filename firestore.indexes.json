@@ -1,0 +1,28 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "maksut",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status",      "order": "ASCENDING" },
+        { "fieldPath": "pvm",         "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "maksut",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "prioriteetti","order": "ASCENDING" },
+        { "fieldPath": "pvm",         "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "taksitulot",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "kuukausi",    "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
