@@ -262,26 +262,38 @@ body {
 .maksu-saldo-after.warn { color: var(--orange); }
 
 .maksu-actions {
-  display: flex; gap: 4px; padding: 0 8px 8px 16px;
+  display: flex; gap: 6px; padding: 0 8px 10px 16px;
+}
+/* iOS: min 44px touch target, no tap delay, visible tap feedback */
+.btn-kuittaa, .btn-muokkaa, .btn-peru, .btn-danger {
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(255,255,255,.15);
+  -webkit-user-select: none;
+  user-select: none;
+  position: relative; z-index: 2;
 }
 .btn-kuittaa {
   background: var(--green2); color: white; border: none;
-  padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
   cursor: pointer; transition: var(--trans); flex: 1;
 }
 .btn-kuittaa:hover { background: var(--green); }
-.btn-kuittaa:active { transform: scale(.97); }
+.btn-kuittaa:active { opacity: .8; transform: scale(.97); }
 .btn-muokkaa {
   background: var(--bg3); border: 1px solid var(--border);
-  color: var(--text2); padding: 5px 10px; border-radius: 6px;
-  font-size: 12px; cursor: pointer; transition: var(--trans);
+  color: var(--text2); padding: 8px 14px; border-radius: 8px;
+  font-size: 13px; cursor: pointer; transition: var(--trans);
 }
 .btn-muokkaa:hover { border-color: var(--accent); color: var(--accent); }
+.btn-muokkaa:active { opacity: .8; }
 .btn-peru {
   background: var(--bg3); border: 1px solid var(--orange);
-  color: var(--orange); padding: 5px 10px; border-radius: 6px;
-  font-size: 12px; cursor: pointer;
+  color: var(--orange); padding: 8px 16px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: var(--trans); flex: 1;
 }
+.btn-peru:active { background: rgba(232,128,32,.15); }
 
 /* swipe hint backgrounds */
 .swipe-hint-right {
