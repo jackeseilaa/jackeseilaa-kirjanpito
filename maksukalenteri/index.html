@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maksukalenteri">
+<meta name="theme-color" content="#0f1923">
+<title>Maksukalenteri</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./css/main.css">
+<link rel="stylesheet" href="./css/dark.css">
+</head>
+<body>
+
+<!-- OFFLINE INDICATOR -->
+<div id="offline-bar" class="offline-bar" style="display:none">📡 Offline-tila — muutokset synkataan kun yhteys palaa</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Ladataan Maksukalenteria…</div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" style="display:none">
+  <div class="auth-box">
+    <div class="auth-logo">💰</div>
+    <div class="auth-title">Maksukalenteri</div>
+    <div class="auth-sub">Jarmon henkilökohtainen taloushallinta</div>
+    <button class="btn-google" id="btn-login">
+      <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Kirjaudu Google-tilillä
+    </button>
+    <div id="auth-error" style="color:#ff8080;font-size:12px;margin-top:12px;display:none"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <div class="header-title">💰 Maksukalenteri</div>
+        <div class="header-version" id="header-user"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="header-btn" id="btn-theme">🌙</button>
+        <button class="header-btn" id="btn-seed" style="display:none">Seed</button>
+        <button class="header-btn" id="btn-logout">Kirjaudu ulos</button>
+      </div>
+    </div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="kalenteri">📅 Kalenteri</button>
+      <button class="nav-tab" data-tab="avoimet">⚠️ Avoimet</button>
+      <button class="nav-tab" data-tab="taksitulot">🚕 Taksitulot</button>
+      <button class="nav-tab" data-tab="yhteenveto">📊 Yhteenveto</button>
+    </nav>
+  </div>
+
+  <div class="main">
+    <!-- Kassasaldo widget -->
+    <div id="saldo-widget" class="saldo-widget">
+      <div class="saldo-label">Ladataan…</div>
+    </div>
+
+    <!-- Tab sisältö -->
+    <div id="main-content"></div>
+  </div>
+
+  <!-- FAB: lisää maksu -->
+  <button class="fab" id="fab-lisaa" title="Lisää maksu">＋</button>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script type="module">
+import { initAuth, googleSignIn, signOutUser } from './js/auth.js';
+import { runSeed } from './js/seed.js';
+import {
+  kuunteleMaksut, kuunteleAsetukset, kuunteleTaksitulot,
+  kuittaaMaksetuksi, peruKuittaus, lisaaMaksu, paivitaMaksu,
+  poistaMaksu, paivitaSaldo, today
+} from './js/maksut.js';
+import {
+  state, renderTab, renderSaldoWidget,
+  naytaMaksuModal, naytaSaldoModal, naytaUndo,
+  attachSwipeHandlers, showToast,
+  renderKalenteri, renderTaksitulot, renderYhteenveto, renderAvoimet
+} from './js/kalenteri.js';
+
+// ── SERVICE WORKER ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(console.warn);
+}
+
+// ── OFFLINE ───────────────────────────────────────────────────────────────────
+window.addEventListener('online',  () => document.getElementById('offline-bar').style.display = 'none');
+window.addEventListener('offline', () => document.getElementById('offline-bar').style.display = 'block');
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+initAuth(
+  user => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('header-user').textContent = user.email;
+    startApp();
+  },
+  err => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+    if (err) {
+      const el = document.getElementById('auth-error');
+      el.textContent = err;
+      el.style.display = 'block';
+    }
+  }
+);
+
+document.getElementById('btn-login').addEventListener('click', async () => {
+  try {
+    await googleSignIn();
+  } catch(e) {
+    const el = document.getElementById('auth-error');
+    el.textContent = e.message;
+    el.style.display = 'block';
+  }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  state.unsubs.forEach(u => u());
+  await signOutUser();
+  location.reload();
+});
+
+// ── APP START ─────────────────────────────────────────────────────────────────
+function startApp() {
+  // Theme
+  if (state.lightMode) document.body.classList.add('light-mode');
+
+  // URL-param: ?seed=1 näyttää seed-napin heti
+  if (new URLSearchParams(location.search).get('seed') === '1') {
+    document.getElementById('btn-seed').style.display = '';
+  }
+
+  // Seuraa onko molemmat kriittiset kuuntelijat saatu kerran
+  let maksutReady = false;
+  let asetuksetReady = false;
+  let welcoming = false; // estää render-flikkerin tervetulosivulla
+
+  function tryRender() {
+    if (!maksutReady) return; // odotetaan aina vähintään maksut
+    renderSaldoWidget();
+    if (!welcoming) renderTab();
+  }
+
+  // Firestore kuuntelijat
+  const u1 = kuunteleMaksut(maksut => {
+    state.maksut = maksut;
+
+    if (!maksutReady) {
+      maksutReady = true;
+      // Ensikäynnistys: tyhjä kollekkio → näytä tervetulo
+      if (maksut.length === 0 && !localStorage.getItem('seeded')) {
+        welcoming = true;
+        document.getElementById('btn-seed').style.display = '';
+        const main = document.getElementById('main-content');
+        if (main) main.innerHTML = `
+          <div style="text-align:center;padding:48px 20px">
+            <div style="font-size:56px;margin-bottom:16px">💰</div>
+            <div style="font-size:20px;font-weight:700;margin-bottom:8px">Tervetuloa Maksukalenteriin!</div>
+            <div style="color:var(--text2);font-size:14px;margin-bottom:24px">
+              Ladataan 2026 maksudata Firestoreen ensimmäisellä käynnistyksellä.
+            </div>
+            <button class="btn-prim" style="max-width:280px;margin:0 auto;display:block"
+              onclick="document.getElementById('btn-seed').click()">
+              📥 Lataa alkudata (2026)
+            </button>
+          </div>`;
+        return;
+      }
+      // Kun data saapuu seeding-operaation jälkeen, poistu tervetulotilasta
+      if (welcoming && maksut.length > 0) welcoming = false;
+    }
+
+    tryRender();
+  });
+
+  const u2 = kuunteleAsetukset(asetukset => {
+    state.asetukset = asetukset;
+    asetuksetReady = true;
+    tryRender();
+  });
+
+  const u3 = kuunteleTaksitulot(taksitulot => {
+    state.taksitulot = taksitulot;
+    if (state.tab === 'taksitulot' && maksutReady) renderTab();
+  });
+
+  state.unsubs.push(u1, u2, u3);
+
+  // Tab-navigointi
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.tab = btn.dataset.tab;
+      renderTab();
+    });
+  });
+
+  // FAB
+  document.getElementById('fab-lisaa').addEventListener('click', () => {
+    naytaMaksuModal(null);
+  });
+
+  // Theme toggle
+  document.getElementById('btn-theme').addEventListener('click', () => {
+    state.lightMode = !state.lightMode;
+    localStorage.setItem('lightMode', state.lightMode ? '1' : '0');
+    document.body.classList.toggle('light-mode', state.lightMode);
+    document.getElementById('btn-theme').textContent = state.lightMode ? '☀️' : '🌙';
+  });
+  document.getElementById('btn-theme').textContent = state.lightMode ? '☀️' : '🌙';
+
+  // Seed-nappi
+  document.getElementById('btn-seed').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-seed');
+    const main = document.getElementById('main-content');
+    btn.textContent = '⏳';
+    btn.disabled = true;
+    if (main) main.innerHTML = `
+      <div style="text-align:center;padding:48px 20px">
+        <div class="loader-ring" style="margin:0 auto 16px"></div>
+        <div style="color:var(--text2);font-size:14px">Ladataan 2026 maksuja Firestoreen…<br>
+        <span style="font-size:12px;color:var(--text3)">Tämä kestää hetken (~40 dokumenttia)</span></div>
+      </div>`;
+    try {
+      const ok = await runSeed();
+      localStorage.setItem('seeded', '1');
+      btn.style.display = 'none';
+      if (ok) {
+        showToast('✅ Seed-data ladattu! Kalenteri päivittyy nyt.', 'success', 5000);
+      } else {
+        showToast('Data oli jo Firestoressä — ladataan kalenteri.', 'warning', 4000);
+      }
+      // Pakota render
+      welcoming = false;
+      renderSaldoWidget();
+      renderTab();
+    } catch(e) {
+      showToast('Seed epäonnistui: ' + e.message, 'error', 6000);
+      btn.textContent = 'Seed';
+      btn.disabled = false;
+      if (main) main.innerHTML = `<div class="alert-banner danger">Virhe: ${e.message}</div>`;
+    }
+  });
+}
+
+// ── GLOBAALIT HANDLER-FUNKTIOT ────────────────────────────────────────────────
+
+window._kuittaa = async (id, vanhaStatus) => {
+  const m = state.maksut.find(x => x.id === id);
+  if (!m) return;
+  try {
+    await kuittaaMaksetuksi(id);
+    naytaUndo(id, vanhaStatus, m.nimi);
+    showToast('Merkitty maksetuksi ✓', 'success');
+  } catch(e) {
+    showToast('Virhe: ' + e.message, 'error');
+  }
+};
+
+window._peruKuittaus = async (id, vanhaStatus) => {
+  try {
+    await peruKuittaus(id, vanhaStatus || 'Avoinna');
+    showToast('Kuittaus peruttu', 'warning');
+  } catch(e) {
+    showToast('Virhe: ' + e.message, 'error');
+  }
+};
+
+window._undoKuittaus = async (id, vanhaStatus) => {
+  const el = document.getElementById('undo-toast');
+  if (el) el.remove();
+  if (state.undoQueue) { clearTimeout(state.undoQueue.timer); state.undoQueue = null; }
+  try {
+    await peruKuittaus(id, vanhaStatus);
+    showToast('Kuittaus peruttu', 'warning');
+  } catch(e) {
+    showToast('Virhe: ' + e.message, 'error');
+  }
+};
+
+window._muokkaa = (id) => {
+  const m = state.maksut.find(x => x.id === id);
+  if (m) naytaMaksuModal(m);
+};
+
+window._poista = async (id, nimi) => {
+  if (!confirm(`Poistetaanko "${nimi}"?`)) return;
+  const modal = document.getElementById('modal');
+  if (modal) modal.remove();
+  try {
+    await poistaMaksu(id);
+    showToast('Poistettu', 'warning');
+  } catch(e) {
+    showToast('Virhe: ' + e.message, 'error');
+  }
+};
+
+window._suljeModal = () => {
+  const modal = document.getElementById('modal');
+  if (modal) modal.remove();
+};
+
+window._tallennaMaksu = async (id) => {
+  const nimi   = document.getElementById('m-nimi')?.value?.trim();
+  const summa  = parseFloat(document.getElementById('m-summa')?.value);
+  const pvm    = document.getElementById('m-pvm')?.value;
+  const tyyppi = document.getElementById('m-tyyppi')?.value;
+  const prioriteetti = document.getElementById('m-prioriteetti')?.value;
+  const status = document.getElementById('m-status')?.value;
+  const kategoria = document.getElementById('m-kategoria')?.value;
+  const kenelle = document.getElementById('m-kenelle')?.value?.trim();
+  const huomio = document.getElementById('m-huomio')?.value?.trim();
+
+  if (!nimi) { showToast('Anna nimi', 'error'); return; }
+  if (isNaN(summa) || summa <= 0) { showToast('Anna kelvollinen summa', 'error'); return; }
+  if (!pvm) { showToast('Valitse päivämäärä', 'error'); return; }
+
+  const data = { nimi, summa, pvm, tyyppi, prioriteetti, status, kategoria, kenelle, huomio };
+  try {
+    if (id) {
+      await paivitaMaksu(id, data);
+      showToast('Tallennettu ✓', 'success');
+    } else {
+      data.maksettu_pvm = null;
+      await lisaaMaksu(data);
+      showToast('Maksu lisätty ✓', 'success');
+    }
+    window._suljeModal();
+  } catch(e) {
+    showToast('Virhe: ' + e.message, 'error');
+  }
+};
+
+window._tallennaSaldo = async () => {
+  const arvo = parseFloat(document.getElementById('s-saldo')?.value);
+  if (isNaN(arvo)) { showToast('Anna kelvollinen summa', 'error'); return; }
+  try {
+    await paivitaSaldo(arvo);
+    showToast('Kassasaldo päivitetty ✓', 'success');
+    window._suljeModal();
+  } catch(e) {
+    showToast('Virhe: ' + e.message, 'error');
+  }
+};
+
+window._editSaldo = () => naytaSaldoModal();
+
+window._toggleHistoria = () => {
+  state.historia = !state.historia;
+  renderTab();
+};
+
+// Modal suljetaan taustaa klikkaamalla
+document.addEventListener('click', e => {
+  if (e.target && e.target.id === 'modal') window._suljeModal();
+});
+
+// Pikanäppäin: Escape sulkee modalin
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') window._suljeModal();
+});
+
+// ── PAIKALLINEN ERÄPÄIVÄMUISTUTUS (ei push, toimii selaimessa) ───────────────
+function tarkistaLocalNotifikaatiot() {
+  if (!('Notification' in window)) return;
+  const td = new Date().toISOString().split('T')[0];
+  const kolme = new Date();
+  kolme.setDate(kolme.getDate() + 3);
+  const kolmeStr = kolme.toISOString().split('T')[0];
+
+  const eraantyvat = state.maksut.filter(m =>
+    m.status !== 'Maksettu' &&
+    m.pvm >= td && m.pvm <= kolmeStr &&
+    (m.prioriteetti === 'PAKKO' || m.status === 'KRIITTINEN')
+  );
+  if (!eraantyvat.length) return;
+
+  const viimeisin = localStorage.getItem('notif_shown');
+  const tanaan = td;
+  if (viimeisin === tanaan) return; // näytetty jo tänään
+
+  if (Notification.permission === 'granted') {
+    eraantyvat.slice(0, 3).forEach(m => {
+      new Notification('Maksukalenteri — eräpäivä lähestyy', {
+        body: `${m.nimi}: ${Number(m.summa).toLocaleString('fi-FI', {minimumFractionDigits:2})} € — ${m.pvm}`,
+        icon: './icons/icon-192.png',
+        tag: m.id,
+      });
+    });
+    localStorage.setItem('notif_shown', tanaan);
+  } else if (Notification.permission === 'default') {
+    // Pyydä lupa vain jos on erääntyviä
+    Notification.requestPermission().then(perm => {
+      if (perm === 'granted') tarkistaLocalNotifikaatiot();
+    });
+  }
+}
+
+// Tarkista notifikaatiot kun data latautuu (viiveellä jotta UI ehtii renderöityä)
+setTimeout(() => {
+  if (state.maksut.length > 0) tarkistaLocalNotifikaatiot();
+}, 3000);
+</script>
+</body>
+</html>

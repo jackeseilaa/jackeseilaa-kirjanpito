@@ -1,0 +1,36 @@
+/* Light mode override — tumma teema on default, tämä on vaalea */
+body.light-mode {
+  --bg:        #f4f7fa;
+  --bg2:       #e8edf2;
+  --bg3:       #dde4eb;
+  --card:      #ffffff;
+  --border:    #c8d4de;
+  --text:      #1a2a38;
+  --text2:     #4a6070;
+  --text3:     #7a96a8;
+  --accent:    #2070c0;
+  --accent2:   #1050a0;
+  --green:     #1a8040;
+  --green2:    #126030;
+  --red:       #d02020;
+  --red2:      #a01818;
+  --orange:    #c06000;
+  --orange2:   #9a4800;
+  --yellow:    #a08000;
+  --purple:    #6030b0;
+  --teal:      #107080;
+}
+
+body.light-mode .header { background: var(--bg2); }
+body.light-mode .saldo-widget { background: var(--card); }
+body.light-mode .auth-box { background: var(--card); }
+body.light-mode .modal-box { background: var(--bg2); }
+body.light-mode .form-input,
+body.light-mode .form-select,
+body.light-mode .form-textarea,
+body.light-mode .taksi-input {
+  background: var(--bg3);
+}
+body.light-mode .loader-ring { border-color: var(--border); border-top-color: var(--accent); }
+body.light-mode #loading { background: var(--bg); }
+body.light-mode #auth-screen { background: var(--bg); }
