@@ -267,7 +267,7 @@ window._kuittaa = async (id, vanhaStatus) => {
   const m = state.maksut.find(x => x.id === id);
   if (!m) return;
   try {
-    await kuittaaMaksetuksi(id);
+    await kuittaaMaksetuksi(id, vanhaStatus);
     naytaUndo(id, vanhaStatus, m.nimi);
     showToast('Merkitty maksetuksi ✓', 'success');
   } catch(e) {
@@ -366,6 +366,41 @@ window._editSaldo = () => naytaSaldoModal();
 window._toggleHistoria = () => {
   state.historia = !state.historia;
   renderTab();
+};
+
+window._setFilter = (f) => {
+  state.filter = f;
+  renderTab();
+};
+
+window._exportCSV = () => {
+  const rows = [
+    ['Päivämäärä','Nimi','Summa','Tyyppi','Kategoria','Status','Prioriteetti','Kenelle','Huomio','Maksettu pvm']
+  ];
+  const sorted = [...state.maksut].sort((a,b) => (a.pvm||'').localeCompare(b.pvm||''));
+  for (const m of sorted) {
+    rows.push([
+      m.pvm || '',
+      (m.nimi || '').replace(/"/g,'""'),
+      String(m.summa || 0).replace('.',','),
+      m.tyyppi || '',
+      m.kategoria || '',
+      m.status || '',
+      m.prioriteetti || '',
+      (m.kenelle || '').replace(/"/g,'""'),
+      (m.huomio || '').replace(/"/g,'""'),
+      m.maksettu_pvm || '',
+    ]);
+  }
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `maksukalenteri_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV ladattu', 'success');
 };
 
 // Modal suljetaan taustaa klikkaamalla
